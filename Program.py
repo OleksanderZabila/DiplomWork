@@ -5,7 +5,7 @@ from config import host, user, password, db_name, port
 from datetime import datetime
 
 open_window = None
-
+#test
 # Підключення до бази даних
 try:
     connection = psycopg2.connect(
