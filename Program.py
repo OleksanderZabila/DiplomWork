@@ -222,16 +222,14 @@ def add_settings():
 
     tab1 = ttk.Frame(notebook)  # Категорії
     tab2 = ttk.Frame(notebook)  # Клієнти
-    tab3 = ttk.Frame(notebook)  # Звіт (поки не чіпаємо)
-    tab4 = ttk.Frame(notebook)  # Постачальники
-    tab5 = ttk.Frame(notebook)  # Одиниці
-    tab6 = ttk.Frame(notebook)  # Списане
+    tab3 = ttk.Frame(notebook)  # Постачальники
+    tab4 = ttk.Frame(notebook)  # Одиниці
 
     # Додавання вкладок до `Notebook`
     notebook.add(tab1, text="Категорії")
     notebook.add(tab2, text="Клієнти")
-    notebook.add(tab4, text="Постачальники")
-    notebook.add(tab5, text="Одиниці")
+    notebook.add(tab3, text="Постачальники")
+    notebook.add(tab4, text="Одиниці")
 
     notebook.pack(expand=True, fill="both")  # Робимо `Notebook` розтягнутим
 
@@ -252,8 +250,7 @@ def add_settings():
     def fetch_providers():
         with connection.cursor() as cursor:
             cursor.execute("""
-                SELECT id_provider, name_provider, telephote_provider, mail_provider, 
-                       menedger_provider, legaladdress_provider, legalform_provider, iban_provider 
+                SELECT id_provider, name_provider, telephone_provider, mail_provider, menedger_provider, legaladdress_provider, legalfrom_provider, iban_provider
                 FROM provider
             """)
             return cursor.fetchall()
@@ -263,12 +260,6 @@ def add_settings():
             cursor.execute("SELECT unit FROM unit")
             return cursor.fetchall()
 
-    def fetch_winteff():
-        with connection.cursor() as cursor:
-            cursor.execute("""SELECT id_goods, name_goods, id_category_goods, number_goods, units_goods, 
-                                Selling_price_goods, purchase_price_goods, id_provider_goods, description_goods
-                            FROM goods """)
-            return  cursor.fetchall()
 
     # Функція створення таблиці
     def create_table(tab, columns, column_widths, fetch_function, add_function):
@@ -348,18 +339,18 @@ def add_settings():
     )
 
     create_table(
-        tab4,
+        tab3,
         ("ID", "Назва", "Телефон", "Email", "Менеджер", "Юр. адреса", "Правова форма", "IBAN"),
         [10, 100, 100, 100, 100, 100, 100, 100],  # Ширини стовпців
         fetch_providers,
         lambda update: add_entry("Додати постачальника",
                                  ["Назва", "Телефон", "Email", "Менеджер", "Юр. адреса", "Правова форма", "IBAN"],
-                                 "INSERT INTO provider (name_provider, telephone_provider, mail_provider, menedger_provider, legaladdress_provider, legalfrom_provider, iban_provider) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                                 "INSERT INTO provider (id_provider, name_provider, telephone_provider, mail_provider, menedger_provider, legaladdress_provider, legalfrom_provider, iban_provider) VALUES (%s, %s, %s, %s, %s, %s, %s)",
                                  update)
     )
 
     create_table(
-        tab5,
+        tab4,
         ("Одиниця вимірювання",),
         [200],  # Ширина одного стовпця
         fetch_units,
