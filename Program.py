@@ -129,7 +129,7 @@ def add_product():
                     # Додаємо нового постачальника
                     cursor.execute("""
                         INSERT INTO provider (name_provider, telephote_provider, mail_provider, menedger_provider, 
-                                               legaladdress_provider, legalform_provider, iban_provider) 
+                                               legaladdress_provider, legalfrom_provider, iban_provider) 
                         VALUES (%s, %s, %s, %s, %s, %s, %s)
                     """, (entries["Назва"].get(), entries["Телефон"].get(), entries["Email"].get(),
                           entries["Менеджер"].get(), entries["Юр. адреса"].get(),
@@ -334,7 +334,7 @@ def add_settings():
         [10, 100, 100, 100, 100, 100, 100],  # Ширини стовпців
         fetch_clients,
         lambda update: add_entry("Додати клієнта", ["Назва", "Телефон", "Email", "Юр. адреса", "Правова форма", "IBAN"],
-                                 "INSERT INTO client (name_client, telephone_client, mail_client, legaladdress_client, legalforms_client, iban_client) VALUES (%s, %s, %s, %s, %s, %s)",
+                                 "INSERT INTO client (id_client, name_client, telephone_client, mail_client, legaladdress_client, legalforms_client, iban_client) VALUES (%s, %s, %s, %s, %s, %s)",
                                  update)
     )
 
@@ -345,8 +345,9 @@ def add_settings():
         fetch_providers,
         lambda update: add_entry("Додати постачальника",
                                  ["Назва", "Телефон", "Email", "Менеджер", "Юр. адреса", "Правова форма", "IBAN"],
-                                 "INSERT INTO provider (id_provider, name_provider, telephone_provider, mail_provider, menedger_provider, legaladdress_provider, legalfrom_provider, iban_provider) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                                 "INSERT INTO provider (name_provider, telephone_provider, mail_provider, menedger_provider, legaladdress_provider, legalfrom_provider, iban_provider) VALUES (%s, %s, %s, %s, %s, %s, %s)",
                                  update)
+
     )
 
     create_table(
