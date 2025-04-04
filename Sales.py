@@ -207,7 +207,7 @@ for col in columns:
 table.pack(fill="both", expand=True)
 
 down_frame = tk.Frame(main_frame)
-down_frame.place(x=210, y=258, relwidth=0.50, height=302)
+down_frame.place(x=210, y=251, relwidth=0.50, height=302)
 
 columns = ("ID", "Назва товару", "Кількість", "Одиниці","Ціна ",)
 
