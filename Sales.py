@@ -150,6 +150,7 @@ right_bottom_frame = tk.Frame(program, width=100, height=300, bg="white", highli
 right_bottom_frame.place(relx=0.99, rely=0.985, anchor="se")
 right_bottom_frame.grid_propagate(False)  # Запобігає зміні розміру фрейма
 
+
 def add_buttons_to_frame(frame):
     # Створюємо внутрішній фрейм для кнопок (займає рівно половину `right_bottom_frame`)
     buttons_frame = tk.Frame(frame, bg="white", width=210, height=300)
@@ -179,6 +180,10 @@ def add_buttons_to_frame(frame):
 left_bottom_frame = tk.Frame(program, width=210, height=302, bg="white", highlightbackground="gray", highlightthickness=1)
 left_bottom_frame.place(relx=0.825, rely=0.985, anchor="se")  # Розташування зліва внизу
 left_bottom_frame.grid_propagate(False)  # Запобігає зміні розміру фрейма
+
+# Додавання кнопки в нижній частині фрейма з відступами
+button = tk.Button(left_bottom_frame, text="Оплата", command=lambda: print("Button clicked"), width=25, height=3)
+button.place(relx=0.5, rely=1.0, anchor="s", x=0, y=-10)  # Відступ знизу
 
 # Словник зі своїми ширинами для колонок
 column_widths = {
