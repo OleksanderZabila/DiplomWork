@@ -2,6 +2,7 @@ import psycopg2
 import tkinter as tk
 from tkinter import ttk, Entry, Button, Listbox, messagebox
 from config import host, user, password, db_name, port
+from datetime import datetime
 
 # Підключення до бази даних
 try:
@@ -77,6 +78,15 @@ def fetch_categories():
             return [row[0] for row in cursor.fetchall()]
     return []
 
+def update_time():
+    """Оновлює час у віджеті Label кожну секунду."""
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    time_label.config(text=current_time)
+    program.after(1000, update_time)  # Запускає оновлення кожну секунду
+# Оновлення головної таблиці (додаємо поле "Опис товару" і кнопку редагування)
+
+
+
 # Головне вікно
 program = tk.Tk()
 program.title('Авто під ключ')
@@ -87,8 +97,11 @@ program.resizable(width=False, height=False)
 upper_frame = tk.Frame(program)
 upper_frame.pack(fill='x', padx=10, pady=5)
 
+time_label = tk.Label(upper_frame, text="", font=("Arial", 14), bg="lightgray")
+time_label.pack(side='left', padx=0)
+
 search_label = tk.Label(upper_frame, text="Фільтр за назвою:")
-search_label.pack(side='left', padx=5)
+search_label.pack(side='left', padx=10)
 
 search_entry = Entry(upper_frame, width=40)
 search_entry.insert(0, "Введіть назву товару")
@@ -231,6 +244,7 @@ search_entry.bind("<FocusIn>", on_search_entry_focus_in)
 search_entry.bind("<FocusOut>", on_search_entry_focus_out)
 search_entry.bind("<KeyRelease>", on_search_entry_change)  # Залишаємо вашу функцію пошуку
 
+update_time()
 add_buttons_to_frame(right_bottom_frame)
 update_table()
 program.mainloop()
