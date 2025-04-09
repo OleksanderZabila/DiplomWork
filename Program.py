@@ -128,7 +128,7 @@ def add_product():
                 with connection.cursor() as cursor:
                     # Додаємо нового постачальника
                     cursor.execute("""
-                        INSERT INTO provider (name_provider, telephote_provider, mail_provider, menedger_provider, 
+                        INSERT INTO provider (name_provider, telephone_provider, mail_provider, menedger_provider, 
                                                legaladdress_provider, legalfrom_provider, iban_provider) 
                         VALUES (%s, %s, %s, %s, %s, %s, %s)
                     """, (entries["Назва"].get(), entries["Телефон"].get(), entries["Email"].get(),
@@ -380,7 +380,7 @@ def written_off():
                 JOIN category c ON g.id_category_goods = c.id_category
                 JOIN provider p ON g.id_provider_goods = p.id_provider
                 JOIN unit u ON g.units_goods = u.unit
-                WHERE (g.number_goods IS NULL OR g.number_goods != '0')
+                
             """)
             for row in cursor.fetchall():
                 table.insert("", "end", values=row)
