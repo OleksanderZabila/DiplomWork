@@ -367,13 +367,15 @@ def report():
 #списаний товар
 def written_off():
     """Відкриває вікно зі списаними товарами"""
+    selected_items = {}
+
     def load_written_off_goods():
-        """Завантажує дані про списані товари"""
-        table.delete(*table.get_children())  # Очищаємо таблицю перед оновленням
+        table.delete(*table.get_children())
+        selected_items.clear()
 
         with connection.cursor() as cursor:
             cursor.execute("""
-                SELECT g.id_goods, g.name_goods, c.name_category, w.number_written_off_goods, u.unit, 
+                SELECT w.id, g.id_goods, g.name_goods, c.name_category, w.number_written_off_goods, u.unit, 
                        g.selling_price_goods, g.purchase_price_goods, p.name_provider, 
                        g.description_goods, w.data, w.description
                 FROM written_off_goods w
@@ -381,64 +383,92 @@ def written_off():
                 JOIN category c ON g.id_category_goods = c.id_category
                 JOIN provider p ON g.id_provider_goods = p.id_provider
                 JOIN unit u ON g.units_goods = u.unit
-                
             """)
-            for row in cursor.fetchall():
-                table.insert("", "end", values=row)
+            rows = cursor.fetchall()  # ← зчитуємо всередині with
+
+        for row in rows:
+            row_id = row[0]
+            values = row[1:] + ("☐",)  # символ "не вибрано"
+            table.insert("", "end", iid=row_id, values=values)
+            selected_items[row_id] = False
+
+    def toggle_selection(event):
+        item = table.identify_row(event.y)
+        col = table.identify_column(event.x)
+        if col == f"#{len(columns)}" and item:
+            current = selected_items.get(int(item), False)
+            new_state = not current
+            selected_items[int(item)] = new_state
+            table.set(item, "Вибрано", "☑" if new_state else "☐")
+
+    def select_all():
+        for item in table.get_children():
+            selected_items[int(item)] = True
+            table.set(item, "Вибрано", "☑")
+
+    def deselect_all():
+        for item in table.get_children():
+            selected_items[int(item)] = False
+            table.set(item, "Вибрано", "☐")
+
+    def delete_selected():
+        ids_to_delete = [item_id for item_id, selected in selected_items.items() if selected]
+        if not ids_to_delete:
+            messagebox.showinfo("Інформація", "Немає вибраних записів для видалення.")
+            return
+
+        if not messagebox.askyesno("Підтвердження", f"Видалити {len(ids_to_delete)} записів?"):
+            return
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "DELETE FROM written_off_goods WHERE id IN %s",
+                (tuple(ids_to_delete),)
+            )
+        load_written_off_goods()
+        messagebox.showinfo("Успіх", "Вибрані записи видалено.")
 
     off_window = Toplevel()
     off_window.title("Списані товари")
-    off_window.geometry("1200x500")
-    off_window.resizable(width=False, height=False)
+    off_window.geometry("1250x550")
 
-    # Верхнє меню
     upper_frame_delet = tk.Frame(off_window)
     upper_frame_delet.pack(fill='x', padx=10, pady=5)
 
-    delet_this = Button(upper_frame_delet, text="Видалити обране", command=2)
-    delet_this.pack(side='right', padx=5)
+    Button(upper_frame_delet, text="Видалити обране", command=delete_selected).pack(side='right', padx=5)
+    Button(upper_frame_delet, text="Вибрати все", command=select_all).pack(side='right', padx=5)
+    Button(upper_frame_delet, text="Відмінити все", command=deselect_all).pack(side='right', padx=5)
 
-    put_oll = Button(upper_frame_delet, text="Вибрати все", command=3)
-    put_oll.pack(side='right', padx=5)
+    global columns
+    columns = ("ID товару", "Назва", "Категорія", "Кількість", "Одиниці",
+               "Ціна продажу", "Ціна закупівлі", "Постачальник", "Опис", "Дата списання", "Причина", "Вибрано")
 
-    dosent_put_oll = Button(upper_frame_delet, text="Відмінити все", command=4)
-    dosent_put_oll.pack(side='right', padx=5)
-
-
-
-    # Головний контейнер
-
-    columns = ("ID", "Назва товару", "Категорія", "Кількість", "Одиниці",
-               "Ціна продажу", "Ціна закупівлі", "Постачальник", "Опис товару", "Дата списання", "Опис списання")
-
-    # 🔹 Визначаємо ширину для кожного стовпця
     column_widths = {
-        "ID": 30,
-        "Назва товару": 150,
+        "ID товару": 50,
+        "Назва": 150,
         "Категорія": 100,
         "Кількість": 80,
         "Одиниці": 60,
         "Ціна продажу": 90,
-        "Ціна закупівлі": 100,
-        "Постачальник": 100,
-        "Опис товару": 180,
-        "Дата списання": 120,
-        "Опис списання": 180
+        "Ціна закупівлі": 90,
+        "Постачальник": 120,
+        "Опис": 150,
+        "Дата списання": 100,
+        "Причина": 150,
+        "Вибрано": 70
     }
 
-    table = ttk.Treeview(off_window, columns=columns, show="headings", height=15)
+    table = ttk.Treeview(off_window, columns=columns, show="headings", height=20)
 
     for col in columns:
         table.heading(col, text=col)
-        if "ціна" in col.lower():  # Для колонок з цінами
-            table.column(col, anchor="e", width=column_widths.get(col, 100))
-        else:  # Для всіх інших колонок
-            table.column(col, anchor="w", width=column_widths.get(col, 100))
+        anchor = "center" if col == "Вибрано" else "w"
+        table.column(col, width=column_widths[col], anchor=anchor)
 
     table.pack(fill="both", expand=True)
+    table.bind("<Button-1>", toggle_selection)
 
-    load_written_off_goods()  # Завантажуємо списані товари при відкритті
-
+    load_written_off_goods()
 
 # Функція для фільтрації категорій і постачальників
 def filter_combobox(combobox, data_source):
@@ -726,6 +756,65 @@ def update_table(category=None, name_filter=None):
             for row in cursor.fetchall():
                 table.insert("", "end", values=row + ("✏️  🗑️",))  # Додаємо іконки у колонку "Дії"
 
+def delete_goods(product_id):
+    def confirm_deletion():
+        try:
+            amount_to_write_off = int(amount_entry.get().strip())
+            if amount_to_write_off <= 0:
+                messagebox.showerror("Помилка", "Кількість списання має бути більше 0!")
+                return
+        except ValueError:
+            messagebox.showerror("Помилка", "Введіть коректну кількість!")
+            return
+
+        reason = reason_entry.get("1.0", "end-1c").strip()
+        if not reason:
+            messagebox.showerror("Помилка", "Вкажіть причину списання!")
+            return
+
+        with connection.cursor() as cursor:
+            # Отримуємо поточну кількість товару
+            cursor.execute("SELECT number_goods FROM goods WHERE id_goods=%s", (product_id,))
+            result = cursor.fetchone()
+            if not result:
+                messagebox.showerror("Помилка", "Товар не знайдено!")
+                return
+
+            current_amount = result[0]
+            if amount_to_write_off > current_amount:
+                messagebox.showerror("Помилка", "На складі недостатньо товару для списання!")
+                return
+
+            # Оновлюємо кількість товару в таблиці goods
+            cursor.execute("""
+                UPDATE goods SET number_goods = number_goods - %s WHERE id_goods = %s
+            """, (amount_to_write_off, product_id))
+
+            # 🔁 Завжди створюємо новий запис у written_off_goods
+            cursor.execute("""
+                INSERT INTO written_off_goods (id_goods, data, description, number_written_off_goods)
+                VALUES (%s, CURRENT_DATE, %s, %s)
+            """, (product_id, reason, amount_to_write_off))
+
+            connection.commit()
+            messagebox.showinfo("Успіх", "Товар списано!")
+            close_window()
+            update_table()
+
+    # Створюємо вікно введення даних
+    delete_window = Toplevel()
+    delete_window.title("Списання товару")
+    delete_window.geometry("300x200")
+
+    Label(delete_window, text="Кількість для списання:").pack()
+    amount_entry = Entry(delete_window)
+    amount_entry.pack()
+
+    Label(delete_window, text="Причина списання:").pack()
+    reason_entry = Text(delete_window, height=3, width=30)
+    reason_entry.pack()
+
+    Button(delete_window, text="Підтвердити", command=confirm_deletion).pack()
 
 #Функція карандаша, смітника
 def on_item_click(event):
@@ -846,81 +935,6 @@ def edit_goods(product_id):
         return window
 
     open_unique_window("Редагувати товар", create_edit_window)
-
-
-def delete_goods(product_id):
-    def confirm_deletion():
-        try:
-            amount_to_write_off = int(amount_entry.get().strip())
-            if amount_to_write_off <= 0:
-                messagebox.showerror("Помилка", "Кількість списання має бути більше 0!")
-                return
-        except ValueError:
-            messagebox.showerror("Помилка", "Введіть коректну кількість!")
-            return
-
-        reason = reason_entry.get("1.0", "end-1c").strip()
-        if not reason:
-            messagebox.showerror("Помилка", "Вкажіть причину списання!")
-            return
-
-        with connection.cursor() as cursor:
-            # Отримуємо поточну кількість товару
-            cursor.execute("SELECT number_goods FROM goods WHERE id_goods=%s", (product_id,))
-            result = cursor.fetchone()
-            if not result:
-                messagebox.showerror("Помилка", "Товар не знайдено!")
-                return
-
-            current_amount = result[0]
-            if amount_to_write_off > current_amount:
-                messagebox.showerror("Помилка", "На складі недостатньо товару для списання!")
-                return
-
-            # Оновлюємо кількість товару в таблиці goods
-            cursor.execute("""
-                UPDATE goods SET number_goods = number_goods - %s WHERE id_goods = %s
-            """, (amount_to_write_off, product_id))
-
-            # Перевіряємо, чи товар вже є у written_off_goods
-            cursor.execute("SELECT id_goods FROM written_off_goods WHERE id_goods = %s", (product_id,))
-            existing = cursor.fetchone()
-
-            if existing:
-                # Оновлюємо запис, якщо товар вже списувався раніше
-                cursor.execute("""
-                    UPDATE written_off_goods 
-                    SET number_written_off_goods = number_written_off_goods + %s, 
-                        data = CURRENT_DATE, 
-                        description = %s 
-                    WHERE id_goods = %s
-                """, (amount_to_write_off, reason, product_id))
-            else:
-                # Додаємо новий запис, якщо товар ще не був списаний
-                cursor.execute("""
-                    INSERT INTO written_off_goods (id_goods, data, description, number_written_off_goods)
-                    VALUES (%s, CURRENT_DATE, %s, %s)
-                """, (product_id, reason, amount_to_write_off))
-
-            connection.commit()
-            messagebox.showinfo("Успіх", "Товар списано!")
-            close_window()
-            update_table()
-
-    # Створюємо вікно введення даних
-    delete_window = Toplevel()
-    delete_window.title("Списання товару")
-    delete_window.geometry("300x200")
-
-    Label(delete_window, text="Кількість для списання:").pack()
-    amount_entry = Entry(delete_window)
-    amount_entry.pack()
-
-    Label(delete_window, text="Причина списання:").pack()
-    reason_entry = Text(delete_window, height=3, width=30)
-    reason_entry.pack()
-
-    Button(delete_window, text="Підтвердити", command=confirm_deletion).pack()
 
 def on_search_entry_change(event):
     name_filter = search_entry.get().strip()
