@@ -429,7 +429,10 @@ def written_off():
 
     for col in columns:
         table.heading(col, text=col)
-        table.column(col, anchor="center", width=column_widths.get(col, 100))  # Використовуємо ширину зі словника
+        if "ціна" in col.lower():  # Для колонок з цінами
+            table.column(col, anchor="e", width=column_widths.get(col, 100))
+        else:  # Для всіх інших колонок
+            table.column(col, anchor="w", width=column_widths.get(col, 100))
 
     table.pack(fill="both", expand=True)
 
@@ -687,8 +690,10 @@ table = ttk.Treeview(right_frame, columns=columns, show="headings", height=15)
 
 for col in columns:
     table.heading(col, text=col)
-    table.column(col, anchor="center", width=column_widths.get(col, 100))  # Використовуємо значення зі словника
-
+    if "ціна" in col.lower():  # Для колонок з цінами
+        table.column(col, anchor="e", width=column_widths.get(col, 100))
+    else:  # Для всіх інших колонок
+        table.column(col, anchor="w", width=column_widths.get(col, 100))
 table.pack(fill="both", expand=True)
 
 def update_table(category=None, name_filter=None):
