@@ -135,8 +135,9 @@ def add_product():
                           entries["Менеджер"].get(), entries["Юр. адреса"].get(),
                           entries["Правова форма"].get(), entries["IBAN"].get()))
 
-                update_table()
 
+                update_table()
+            provider_combobox['values'] = fetch_providers()
             load_providers()  # Оновлюємо таблицю
 
         def load_providers():
