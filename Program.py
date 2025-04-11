@@ -283,15 +283,46 @@ def add_settings():
 
         update_table()  # Заповнюємо таблицю при створенні
 
-        # Додаємо кнопку "Додати"
-        add_button = tk.Button(frame, text="Додати", command=lambda: add_function(update_table))
-        add_button.pack(pady=5)
+        button_frame = tk.Frame(frame)
+        button_frame.pack(pady=5)
+
+        def delete_selected():
+            selected = tree.selection()
+            if not selected:
+                messagebox.showwarning("Увага", "Виберіть рядок для видалення!")
+                return
+
+            selected_values = tree.item(selected[0])["values"]
+            id_ = selected_values[0]
+
+            if not messagebox.askyesno("Підтвердження", "Ви дійсно хочете видалити запис?"):
+                return
+
+            # ⚠️ Перевірка використання (тільки для категорій, постачальників, клієнтів)
+            if "Категорії" in tab.winfo_name():
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT COUNT(*) FROM goods WHERE id_category_goods = %s", (id_,))
+                    if cursor.fetchone()[0] > 0:
+                        messagebox.showerror("Помилка", "Категорія використовується у товарах!")
+                        return
+                    cursor.execute("DELETE FROM category WHERE id_category = %s", (id_,))
+
+            # Подібно для клієнтів, постачальників...
+
+            update_table()
+
+        add_button = tk.Button(button_frame, text="Додати", command=lambda: add_function(update_table))
+        add_button.pack(side="left", padx=5)
+
+        delete_button = tk.Button(button_frame, text="Видалити", command=delete_selected)
+        delete_button.pack(side="left", padx=5)
 
         return tree
 
+
     # Функція для додавання нових записів
     def add_entry(title, fields, insert_query, update_func):
-        add_window = tk.Toplevel(add_window_settings)
+        add_window = tk.Toplevel()
         add_window.title(title)
         add_window.geometry("400x300")
 
@@ -299,7 +330,15 @@ def add_settings():
 
         for i, field in enumerate(fields):
             tk.Label(add_window, text=field).grid(row=i, column=0, padx=10, pady=5, sticky="w")
-            entry = tk.Entry(add_window, width=30)
+
+            if field == "Назва Категорії":
+                entry = ttk.Combobox(add_window, width=30)
+                entry['values'] = [name for _, name in fetch_categories()]
+                entry.bind("<KeyRelease>",
+                           lambda event, cb=entry: filter_combobox(cb, [name for _, name in fetch_categories()]))
+            else:
+                entry = tk.Entry(add_window, width=30)
+
             entry.grid(row=i, column=1, padx=10, pady=5)
             entries[field] = entry
 
@@ -309,15 +348,18 @@ def add_settings():
                 messagebox.showerror("Помилка", "Усі поля повинні бути заповнені!")
                 return
 
-            with connection.cursor() as cursor:
-                cursor.execute(insert_query, values)
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute(insert_query, values)
                 connection.commit()
+                messagebox.showinfo("Успіх", "Дані додано!")
+                add_window.destroy()
+                update_func()
+            except Exception as e:
+                messagebox.showerror("Помилка", f"Не вдалося додати дані!\n{e}")
 
-            messagebox.showinfo("Успіх", "Дані додано!")
-            add_window.destroy()
-            update_func()  # Оновлення таблиці
-
-        tk.Button(add_window, text="Зберегти", command=save_entry).grid(row=len(fields), column=0, columnspan=2, pady=10)
+        tk.Button(add_window, text="Зберегти", command=save_entry).grid(row=len(fields), column=0, columnspan=2,
+                                                                        pady=10)
 
     # Створюємо таблиці у вкладках
     create_table(
