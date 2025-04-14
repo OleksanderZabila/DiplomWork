@@ -375,45 +375,49 @@ def add_settings():
 
 
     # Функція для додавання нових записів
-    def add_entry(title, fields, insert_query, update_func):
-        add_window = tk.Toplevel()
-        add_window.title(title)
-        add_window.geometry("400x300")
+    def add_entry_category(update_func):
+        window = Toplevel()
+        window.title("Додати категорію")
+        window.geometry("400x300")
 
-        entries = {}
+        tk.Label(window, text="Назва категорії:").pack(pady=5)
 
-        for i, field in enumerate(fields):
-            tk.Label(add_window, text=field).grid(row=i, column=0, padx=10, pady=5, sticky="w")
+        entry_var = tk.StringVar()
+        entry = Entry(window, textvariable=entry_var, width=30)
+        entry.pack(pady=5)
 
-            if field == "Назва Категорії":
-                entry = ttk.Combobox(add_window, width=30)
-                entry['values'] = [name for _, name in fetch_categories()]
-                entry.bind("<KeyRelease>",
-                           lambda event, cb=entry: filter_combobox(cb, [name for _, name in fetch_categories()]))
-            else:
-                entry = tk.Entry(add_window, width=30)
+        listbox = Listbox(window, height=8)
+        listbox.pack(fill="both", expand=True, padx=10, pady=5)
 
-            entry.grid(row=i, column=1, padx=10, pady=5)
-            entries[field] = entry
+        def update_listbox(*args):
+            listbox.delete(0, tk.END)
+            search = entry_var.get().lower()
+            categories = [name for _, name in fetch_categories()]
+            for cat in categories:
+                if search in cat.lower():
+                    listbox.insert(tk.END, cat)
 
-        def save_entry():
-            values = [entry.get() for entry in entries.values()]
-            if not all(values):
-                messagebox.showerror("Помилка", "Усі поля повинні бути заповнені!")
+        entry_var.trace_add("write", update_listbox)
+        update_listbox()
+
+        def save():
+            new_name = entry.get().strip()
+            if not new_name:
+                messagebox.showerror("Помилка", "Назва категорії не може бути порожньою!")
+                return
+            existing = [name.lower() for _, name in fetch_categories()]
+            if new_name.lower() in existing:
+                messagebox.showwarning("Увага", "Така категорія вже існує!")
                 return
 
-            try:
-                with connection.cursor() as cursor:
-                    cursor.execute(insert_query, values)
+            with connection.cursor() as cursor:
+                cursor.execute("INSERT INTO category (name_category) VALUES (%s)", (new_name,))
                 connection.commit()
-                messagebox.showinfo("Успіх", "Дані додано!")
-                add_window.destroy()
-                update_func()
-            except Exception as e:
-                messagebox.showerror("Помилка", f"Не вдалося додати дані!\n{e}")
+            messagebox.showinfo("Успіх", "Категорію додано!")
+            update_func()
+            window.destroy()
 
-        tk.Button(add_window, text="Зберегти", command=save_entry).grid(row=len(fields), column=0, columnspan=2,
-                                                                        pady=10)
+        Button(window, text="Зберегти", command=save).pack(pady=10)
 
     # Створюємо таблиці у вкладках
     create_table(
@@ -421,8 +425,7 @@ def add_settings():
         ("ID", "Назва Категорії"),
         [20, 800],
         fetch_categories,
-        lambda update: add_entry("Додати категорію", ["Назва Категорії"],
-                                 "INSERT INTO category (name_category) VALUES (%s)", update),
+        add_entry_category,  # ← замість лямбди
         "Категорії"
     )
 
