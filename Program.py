@@ -259,7 +259,8 @@ def add_settings():
 
 
     # Функція створення таблиці
-    def create_table(tab, columns, column_widths, fetch_function, add_function):
+    def create_table(tab, columns, column_widths, fetch_function, add_function, tab_name):
+
         frame = ttk.Frame(tab)
         frame.pack(expand=True, fill="both")
 
@@ -276,6 +277,41 @@ def add_settings():
                 tree.delete(row)
             for row in fetch_function():
                 tree.insert("", "end", values=row)
+
+        def delete_selected():
+            selected = tree.selection()
+            if not selected:
+                messagebox.showwarning("Увага", "Виберіть рядок для видалення!")
+                return
+
+            selected_values = tree.item(selected[0])["values"]
+            id_ = selected_values[0]
+
+            if not messagebox.askyesno("Підтвердження", "Ви дійсно хочете видалити запис?"):
+                return
+
+            # Обробка видалення залежно від вкладки
+            tab_title = tab.winfo_name().lower()  # назва вкладки (наприклад, tab1)
+
+            if "категорії" in tab_title:
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT COUNT(*) FROM goods WHERE id_category_goods = %s", (id_,))
+                    count = cursor.fetchone()[0]
+                    if count > 0:
+                        cursor.execute("SELECT name_goods FROM goods WHERE id_category_goods = %s", (id_,))
+                        used_goods = [row[0] for row in cursor.fetchall()]
+                        messagebox.showerror(
+                            "Помилка",
+                            "Цю категорію не можна видалити, оскільки вона використовується в наступних товарах:\n\n" +
+                            "\n".join(used_goods)
+                        )
+                        return
+                    cursor.execute("DELETE FROM category WHERE id_category = %s", (id_,))
+
+            else:
+                messagebox.showinfo("Інфо", "Ця перевірка реалізована тільки для вкладки Категорії.")
+
+            update_table()
 
         update_table()  # Заповнюємо таблицю при створенні
 
@@ -294,18 +330,40 @@ def add_settings():
             if not messagebox.askyesno("Підтвердження", "Ви дійсно хочете видалити запис?"):
                 return
 
-            # ⚠️ Перевірка використання (тільки для категорій, постачальників, клієнтів)
-            if "Категорії" in tab.winfo_name():
-                with connection.cursor() as cursor:
-                    cursor.execute("SELECT COUNT(*) FROM goods WHERE id_category_goods = %s", (id_,))
-                    if cursor.fetchone()[0] > 0:
-                        messagebox.showerror("Помилка", "Категорія використовується у товарах!")
+            with connection.cursor() as cursor:
+                if tab_name == "Категорії":
+                    cursor.execute("SELECT name_goods FROM goods WHERE id_category_goods = %s", (id_,))
+                    used_goods = [row[0] for row in cursor.fetchall()]
+                    if used_goods:
+                        messagebox.showerror("Помилка", "Категорію використовують товари:\n\n" + "\n".join(used_goods))
                         return
                     cursor.execute("DELETE FROM category WHERE id_category = %s", (id_,))
 
-            # Подібно для клієнтів, постачальників...
+                elif tab_name == "Клієнти":
 
-            update_table()
+                    cursor.execute("DELETE FROM client WHERE id_client = %s", (id_,))
+
+                elif tab_name == "Постачальники":
+                    cursor.execute("SELECT name_goods FROM goods WHERE id_provider_goods = %s", (id_,))
+                    used_goods = [row[0] for row in cursor.fetchall()]
+                    if used_goods:
+                        messagebox.showerror("Помилка",
+                                             "Постачальника використовують товари:\n\n" + "\n".join(used_goods))
+                        return
+                    cursor.execute("DELETE FROM provider WHERE id_provider = %s", (id_,))
+
+                elif tab_name == "Одиниці":
+                    cursor.execute(
+                        "SELECT name_goods FROM goods WHERE units_goods = (SELECT unit FROM unit WHERE unit = %s)",
+                        (id_,))
+                    used_goods = [row[0] for row in cursor.fetchall()]
+                    if used_goods:
+                        messagebox.showerror("Помилка", "Одиницю використовують товари:\n\n" + "\n".join(used_goods))
+                        return
+                    cursor.execute("DELETE FROM unit WHERE unit = %s", (id_,))
+
+                connection.commit()
+                update_table()
 
         add_button = tk.Button(button_frame, text="Додати", command=lambda: add_function(update_table))
         add_button.pack(side="left", padx=5)
@@ -364,39 +422,44 @@ def add_settings():
         [20, 800],
         fetch_categories,
         lambda update: add_entry("Додати категорію", ["Назва Категорії"],
-                                 "INSERT INTO category (name_category) VALUES (%s)", update)
+                                 "INSERT INTO category (name_category) VALUES (%s)", update),
+        "Категорії"
     )
 
     create_table(
         tab2,
         ("ID", "Назва", "Телефон", "Email", "Юр. адреса", "Правова форма", "IBAN"),
-        [10, 100, 100, 100, 100, 100, 100],  # Ширини стовпців
+        [10, 100, 100, 100, 100, 100, 100],
         fetch_clients,
-        lambda update: add_entry("Додати клієнта", ["Назва", "Телефон", "Email", "Юр. адреса", "Правова форма", "IBAN"],
-                                 "INSERT INTO client (id_client, name_client, telephone_client, mail_client, legaladdress_client, legalforms_client, iban_client) VALUES (%s, %s, %s, %s, %s, %s)",
-                                 update)
+        lambda update: add_entry("Додати клієнта",
+                                 ["ID", "Назва", "Телефон", "Email", "Юр. адреса", "Правова форма", "IBAN"],
+                                 "INSERT INTO client (id_client, name_client, telephone_client, mail_client, legaladdress_client, legalforms_client, iban_client) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                                 update),
+        "Клієнти"
     )
 
     create_table(
         tab3,
         ("ID", "Назва", "Телефон", "Email", "Менеджер", "Юр. адреса", "Правова форма", "IBAN"),
-        [10, 100, 100, 100, 100, 100, 100, 100],  # Ширини стовпців
+        [10, 100, 100, 100, 100, 100, 100, 100],
         fetch_providers,
         lambda update: add_entry("Додати постачальника",
                                  ["Назва", "Телефон", "Email", "Менеджер", "Юр. адреса", "Правова форма", "IBAN"],
                                  "INSERT INTO provider (name_provider, telephone_provider, mail_provider, menedger_provider, legaladdress_provider, legalfrom_provider, iban_provider) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                                 update)
-
+                                 update),
+        "Постачальники"
     )
 
     create_table(
         tab4,
         ("Одиниця вимірювання",),
-        [200],  # Ширина одного стовпця
+        [200],
         fetch_units,
         lambda update: add_entry("Додати одиницю вимірювання", ["Одиниця вимірювання"],
-                                 "INSERT INTO unit (unit) VALUES (%s)", update)
+                                 "INSERT INTO unit (unit) VALUES (%s)", update),
+        "Одиниці"
     )
+
 
 #звіт
 def report():
@@ -447,23 +510,6 @@ def written_off():
         for item in table.get_children():
             selected_items[int(item)] = False
             table.set(item, "Вибрано", "☐")
-
-    def delete_selected():
-        ids_to_delete = [item_id for item_id, selected in selected_items.items() if selected]
-        if not ids_to_delete:
-            messagebox.showinfo("Інформація", "Немає вибраних записів для видалення.")
-            return
-
-        if not messagebox.askyesno("Підтвердження", f"Видалити {len(ids_to_delete)} записів?"):
-            return
-
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "DELETE FROM written_off_goods WHERE id IN %s",
-                (tuple(ids_to_delete),)
-            )
-        load_written_off_goods()
-        messagebox.showinfo("Успіх", "Вибрані записи видалено.")
 
     off_window = Toplevel()
     off_window.title("Списані товари")
