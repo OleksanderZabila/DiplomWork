@@ -518,6 +518,25 @@ def written_off():
     upper_frame_delet = tk.Frame(off_window)
     upper_frame_delet.pack(fill='x', padx=10, pady=5)
 
+    def delete_selected():
+        ids_to_delete = [item_id for item_id, selected in selected_items.items() if selected]
+        if not ids_to_delete:
+            messagebox.showinfo("Інформація", "Немає вибраних записів для видалення.")
+            return
+
+        if not messagebox.askyesno("Підтвердження", f"Видалити {len(ids_to_delete)} записів?"):
+            return
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "DELETE FROM written_off_goods WHERE id IN %s",
+                (tuple(ids_to_delete),)
+            )
+            connection.commit()
+
+        messagebox.showinfo("Успіх", "Вибрані записи видалено.")
+        off_window.destroy()  # автоматично закриває вікно
+
     Button(upper_frame_delet, text="Видалити обране", command=delete_selected).pack(side='right', padx=5)
     Button(upper_frame_delet, text="Вибрати все", command=select_all).pack(side='right', padx=5)
     Button(upper_frame_delet, text="Відмінити все", command=deselect_all).pack(side='right', padx=5)
