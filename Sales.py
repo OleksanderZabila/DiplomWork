@@ -49,6 +49,8 @@ def update_table(category=None, name_filter=None, id_filter=None):
             cursor.execute(query, params)
 
             for row in cursor.fetchall():
+                row = list(row)
+                row.append("➕")  # додаємо значок у колонку "Дія"
                 table.insert("", tk.END, values=row)
 
 
@@ -146,7 +148,8 @@ right_frame = tk.Frame(main_frame)
 right_frame.place(x=210, y=0, relwidth=0.83, height=250)
 
 columns = ("ID", "Назва товару", "Категорія", "Кількість", "Одиниці",
-           "Ціна продажу", "Ціна закупівлі", "Постачальник", "Опис товару")
+           "Ціна продажу", "Ціна закупівлі", "Постачальник", "Опис товару", "Дія")
+
 
 # Таблиця нижня права
 
@@ -201,6 +204,7 @@ column_widths = {
     "Ціна закупівлі": 100,
     "Постачальник": 150,
     "Опис товару": 200,
+    "Дія": 20,
 }
 
 table = ttk.Treeview(right_frame, columns=columns, show="headings", height=15)
@@ -209,7 +213,53 @@ for col in columns:
     table.heading(col, text=col)
     table.column(col, anchor="center", width=column_widths.get(col, 100))  # Використовуємо значення зі словника
 
+def handle_action_click(event):
+    item_id = table.identify_row(event.y)
+    column = table.identify_column(event.x)
+
+    if not item_id:
+        return
+
+    col_index = int(column.replace('#', '')) - 1
+    if table["columns"][col_index] != "Дія":
+        return
+
+    values = table.item(item_id, "values")
+    id_goods = values[0]
+    name_goods = values[1]
+    price = values[5]
+    current_qty = int(values[3])
+
+    if current_qty <= 0:
+        messagebox.showwarning("Недостатньо", "Товару більше нема на складі!")
+        return
+
+    try:
+        with connection.cursor() as cursor:
+            # Зменшення кількості товару
+            cursor.execute("UPDATE goods SET number_goods = number_goods - 1 WHERE id_goods = %s", (id_goods,))
+
+            # Додавання до таблиці продажу (sale)
+            cursor.execute("""
+                INSERT INTO sale (id_goods, number_sale, id_check)
+                VALUES (%s, %s, %s)
+                RETURNING id_sale
+            """, (id_goods, 1, 1))  # Поки що id_check = 1 як приклад
+
+            id_sale = cursor.fetchone()[0]
+
+            # Додаємо в нижню таблицю продажу
+            table_down.insert("", tk.END, values=(id_goods, name_goods, price, 1))
+
+        # Оновлюємо головну таблицю (товарів стало менше)
+        update_table()
+
+    except Exception as e:
+        messagebox.showerror("Помилка", f"Не вдалося додати товар у продаж: {e}")
+
 table.pack(fill="both", expand=True)
+table.bind("<Button-1>", handle_action_click)  # ← ось цей
+
 
 down_frame = tk.Frame(main_frame)
 down_frame.place(x=210, y=251, relwidth=0.50, height=302)
@@ -230,6 +280,8 @@ for col in columns:
     table_down.column(col, anchor="center", width=column_widths.get(col, 100))  # Використовуємо значення зі словника
 
 table_down.pack(fill="both", expand=True)
+# Обробка +
+
 
 def on_search_entry_change(event):
     name_filter = search_entry.get().strip()
