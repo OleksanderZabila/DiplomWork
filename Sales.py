@@ -249,13 +249,72 @@ def handle_action_click(event):
             id_sale = cursor.fetchone()[0]
 
             # Додаємо в нижню таблицю продажу
-            table_down.insert("", tk.END, values=(id_goods, name_goods, price, 1))
+            table_down.insert("", tk.END, values=(id_goods, name_goods, price, 1, "➕ ➖ 🗑"))
 
         # Оновлюємо головну таблицю (товарів стало менше)
         update_table()
 
     except Exception as e:
         messagebox.showerror("Помилка", f"Не вдалося додати товар у продаж: {e}")
+
+def handle_down_action_click(event):
+    item_id = table_down.identify_row(event.y)
+    column = table_down.identify_column(event.x)
+
+    if not item_id:
+        return
+
+    col_index = int(column.replace('#', '')) - 1
+    if table_down["columns"][col_index] != "Дія":
+        return
+
+    values = table_down.item(item_id, "values")
+    id_goods = values[0]
+    name_goods = values[1]
+    price = values[2]
+    number = int(values[3])
+
+    # Визначаємо позицію кліку в осі X (відносно ячейки)
+    cell_x, _, cell_w, _ = table_down.bbox(item_id, column)
+    click_offset = event.x - cell_x
+
+    try:
+        if click_offset < 25:
+            # ➕ Додати 1 товар
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT number_goods FROM goods WHERE id_goods = %s", (id_goods,))
+                available = cursor.fetchone()[0]
+                if available <= 0:
+                    messagebox.showwarning("Недостатньо", "Товару більше нема на складі!")
+                    return
+
+                cursor.execute("UPDATE sale SET number_sale = number_sale + 1 WHERE id_goods = %s", (id_goods,))
+                cursor.execute("UPDATE goods SET number_goods = number_goods - 1 WHERE id_goods = %s", (id_goods,))
+            table_down.set(item_id, "Кількість", number + 1)
+            update_table()
+
+        elif click_offset < 50:
+            # ➖ Мінус 1 товар
+            if number > 1:
+                with connection.cursor() as cursor:
+                    cursor.execute("UPDATE sale SET number_sale = number_sale - 1 WHERE id_goods = %s", (id_goods,))
+                    cursor.execute("UPDATE goods SET number_goods = number_goods + 1 WHERE id_goods = %s", (id_goods,))
+                table_down.set(item_id, "Кількість", number - 1)
+            else:
+                messagebox.showinfo("Увага", "Використайте смітник, щоб повністю видалити товар.")
+            update_table()
+
+        else:
+            # 🗑 Смітник — повертаємо весь товар
+            with connection.cursor() as cursor:
+                cursor.execute("DELETE FROM sale WHERE id_goods = %s", (id_goods,))
+                cursor.execute("UPDATE goods SET number_goods = number_goods + %s WHERE id_goods = %s", (number, id_goods))
+            table_down.delete(item_id)
+            update_table()
+
+    except Exception as e:
+        messagebox.showerror("Помилка", f"Не вдалося виконати дію: {e}")
+
 
 table.pack(fill="both", expand=True)
 table.bind("<Button-1>", handle_action_click)  # ← ось цей
@@ -264,7 +323,8 @@ table.bind("<Button-1>", handle_action_click)  # ← ось цей
 down_frame = tk.Frame(main_frame)
 down_frame.place(x=210, y=251, relwidth=0.50, height=302)
 
-columns = ("ID", "Назва товару","Ціна ", "Кількість")
+columns = ("ID", "Назва товару", "Ціна", "Кількість", "Дія")
+
 
 # Словник зі своїми ширинами для колонок
 column_widths = {
@@ -272,6 +332,8 @@ column_widths = {
     "Назва товару": 150,
     "Ціна ": 100,
     "Кількість": 80,
+    "Дія": 10,
+
 }
 table_down = ttk.Treeview(down_frame, columns=columns, show="headings", height=15)
 
@@ -280,6 +342,8 @@ for col in columns:
     table_down.column(col, anchor="center", width=column_widths.get(col, 100))  # Використовуємо значення зі словника
 
 table_down.pack(fill="both", expand=True)
+table_down.bind("<Button-1>", handle_down_action_click)
+
 # Обробка +
 
 
