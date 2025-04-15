@@ -19,8 +19,8 @@ except Exception as _ex:
     print("[ERROR] Помилка підключення:", _ex)
     connection = None
 
-def update_table(category=None, name_filter=None):
-    table.delete(*table.get_children())  # Очищуємо таблицю перед оновленням
+def update_table(category=None, name_filter=None, id_filter=None):
+    table.delete(*table.get_children())
     if connection:
         with connection.cursor() as cursor:
             query = """
@@ -35,17 +35,22 @@ def update_table(category=None, name_filter=None):
             params = []
 
             if category:
-                query += " WHERE c.name_category = %s"
+                query += " AND c.name_category = %s"
                 params.append(category)
 
             if name_filter:
-                query += " AND g.name_goods ILIKE %s" if category else " WHERE g.name_goods ILIKE %s"
+                query += " AND g.name_goods ILIKE %s"
                 params.append(f"%{name_filter}%")
+
+            if id_filter:
+                query += " AND g.id_goods = %s"
+                params.append(id_filter)
 
             cursor.execute(query, params)
 
             for row in cursor.fetchall():
                 table.insert("", tk.END, values=row)
+
 
 def update_category_list(event=None):
     """ Оновлює список категорій відповідно до введеного тексту або виводить всі, якщо поле порожнє """
@@ -209,15 +214,14 @@ table.pack(fill="both", expand=True)
 down_frame = tk.Frame(main_frame)
 down_frame.place(x=210, y=251, relwidth=0.50, height=302)
 
-columns = ("ID", "Назва товару", "Кількість", "Одиниці","Ціна ",)
+columns = ("ID", "Назва товару","Ціна ", "Кількість")
 
 # Словник зі своїми ширинами для колонок
 column_widths = {
     "ID": 30,
     "Назва товару": 150,
-    "Кількість": 80,
-    "Одиниці": 80,
     "Ціна ": 100,
+    "Кількість": 80,
 }
 table_down = ttk.Treeview(down_frame, columns=columns, show="headings", height=15)
 
