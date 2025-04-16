@@ -434,7 +434,7 @@ def add_settings():
         ("ID", "Назва", "Телефон", "Email", "Юр. адреса", "Правова форма", "IBAN"),
         [10, 100, 100, 100, 100, 100, 100],
         fetch_clients,
-        lambda update: add_entry("Додати клієнта",
+        lambda update: add_entry_category("Додати клієнта",
                                  ["ID", "Назва", "Телефон", "Email", "Юр. адреса", "Правова форма", "IBAN"],
                                  "INSERT INTO client (id_client, name_client, telephone_client, mail_client, legaladdress_client, legalforms_client, iban_client) VALUES (%s, %s, %s, %s, %s, %s, %s)",
                                  update),
@@ -446,7 +446,7 @@ def add_settings():
         ("ID", "Назва", "Телефон", "Email", "Менеджер", "Юр. адреса", "Правова форма", "IBAN"),
         [10, 100, 100, 100, 100, 100, 100, 100],
         fetch_providers,
-        lambda update: add_entry("Додати постачальника",
+        lambda update: add_entry_category("Додати постачальника",
                                  ["Назва", "Телефон", "Email", "Менеджер", "Юр. адреса", "Правова форма", "IBAN"],
                                  "INSERT INTO provider (name_provider, telephone_provider, mail_provider, menedger_provider, legaladdress_provider, legalfrom_provider, iban_provider) VALUES (%s, %s, %s, %s, %s, %s, %s)",
                                  update),
@@ -458,7 +458,7 @@ def add_settings():
         ("Одиниця вимірювання",),
         [200],
         fetch_units,
-        lambda update: add_entry("Додати одиницю вимірювання", ["Одиниця вимірювання"],
+        lambda update: add_entry_category("Додати одиницю вимірювання", ["Одиниця вимірювання"],
                                  "INSERT INTO unit (unit) VALUES (%s)", update),
         "Одиниці"
     )

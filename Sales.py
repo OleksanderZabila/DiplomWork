@@ -1,6 +1,7 @@
 import psycopg2
 import tkinter as tk
-from tkinter import ttk, Entry, Button, Listbox, messagebox
+from tkinter import ttk, Entry, Toplevel, Label, Entry, Frame, Button, Listbox, messagebox
+from tkinter.ttk import Combobox
 from config import host, user, password, db_name, port
 from datetime import datetime
 
@@ -18,6 +19,14 @@ try:
 except Exception as _ex:
     print("[ERROR] Помилка підключення:", _ex)
     connection = None
+def get_clients():
+    clients = []
+    if connection:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT name_client FROM client")
+            result = cursor.fetchall()
+            clients = [row[0] for row in result]
+    return clients
 
 def update_table(category=None, name_filter=None, id_filter=None):
     table.delete(*table.get_children())
@@ -114,6 +123,51 @@ search_entry = Entry(upper_frame, width=40)
 search_entry.insert(0, "Введіть назву товару")
 search_entry.pack(side='left', padx=5)
 
+id_label = Label(upper_frame, text="Фільтр за ID:")
+id_label.pack(side=tk.LEFT)
+
+id_entry = Entry(upper_frame)
+id_entry.pack(side=tk.LEFT)
+
+def search_by_id(event=None):
+    search_id = id_entry.get()
+    table.delete(*table.get_children())
+    if connection:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT * FROM goods WHERE CAST(id_goods AS TEXT) LIKE %s", ('%' + search_id + '%',))
+            for row in cursor.fetchall():
+                table.insert("", tk.END, values=row + ("➕",))
+
+
+def open_clients_window():
+    win = Toplevel(program)
+    win.title("Клієнти")
+
+    tree = ttk.Treeview(win, columns=("ID", "Ім'я", "Телефон", "Пошта"), show="headings")
+    tree.pack(fill=tk.BOTH, expand=True)
+
+    for col in tree["columns"]:
+        tree.heading(col, text=col)
+
+    if connection:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT id_client, name_client, telephone_client, mail_client FROM client")
+            for row in cursor.fetchall():
+                tree.insert("", tk.END, values=row)
+
+    def add_client():
+        # вікно додавання
+        pass  # вставлю логіку, якщо підтвердиш
+
+    btn = Button(win, text="Додати клієнта", command=add_client)
+    btn.pack()
+
+
+# кнопка праворуч
+clients_button = Button(upper_frame, text="Клієнти", command=open_clients_window)
+clients_button.pack(side='right', padx=10)
+
+
 
 # Головний контейнер
 main_frame = tk.Frame(program)
@@ -190,8 +244,37 @@ left_bottom_frame.place(relx=0.825, rely=0.985, anchor="se")  # Розташув
 left_bottom_frame.grid_propagate(False)  # Запобігає зміні розміру фрейма
 
 # Додавання кнопки в нижній частині фрейма з відступами
-button = tk.Button(left_bottom_frame, text="Оплата", command=lambda: print("Button clicked"), width=25, height=3)
-button.place(relx=0.5, rely=1.0, anchor="s", x=0, y=-10)  # Відступ знизу
+def calculate_change(*args):
+    try:
+        total = float(total_label_var.get())
+        paid = float(payment_frame.get())
+        change = paid - total
+        change_label_var.set(f"{change:.2f}")
+    except:
+        change_label_var.set("0.00")
+
+# Змінні
+total_label_var = tk.StringVar(value="0.00")
+change_label_var = tk.StringVar(value="0.00")
+
+tk.Label(left_bottom_frame, text="До сплати:").pack()
+tk.Label(left_bottom_frame, textvariable=total_label_var, font=("Arial", 14)).pack()
+
+payment_frame = tk.Frame(left_bottom_frame, bg="lightgray", width=210, height=118)
+payment_frame.pack()
+payment_frame.pack_propagate(False)  # ❗️ВАЖЛИВО: не дозволяє зменшувати фрейм до розміру внутрішніх елементів
+
+
+
+tk.Label(left_bottom_frame, text="Решта:").pack()
+tk.Label(left_bottom_frame, textvariable=change_label_var, font=("Arial", 12)).pack()
+
+tk.Label(left_bottom_frame, text="Клієнт:").pack()
+client_combobox = Combobox(left_bottom_frame, values=get_clients())  # get_clients повертає лише імена
+client_combobox.pack()
+
+
+tk.Button(left_bottom_frame, text="Оплатити", command=lambda: print("Чек оплачено")).pack(pady=10)
 
 # Словник зі своїми ширинами для колонок
 column_widths = {
@@ -212,6 +295,20 @@ table = ttk.Treeview(right_frame, columns=columns, show="headings", height=15)
 for col in columns:
     table.heading(col, text=col)
     table.column(col, anchor="center", width=column_widths.get(col, 100))  # Використовуємо значення зі словника
+def update_table_down():
+    table_down.delete(*table_down.get_children())
+
+    if connection:
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT s.id_goods, g.name_goods, g.selling_price_goods, s.number_sale
+                FROM sale s
+                JOIN goods g ON s.id_goods = g.id_goods
+                WHERE s.status_check = 1
+            """)
+            for row in cursor.fetchall():
+                table_down.insert("", tk.END, values=(row[0], row[1], row[2], row[3], "➕ ➖ 🗑"))
+
 
 def handle_action_click(event):
     item_id = table.identify_row(event.y)
@@ -241,10 +338,11 @@ def handle_action_click(event):
 
             # Додавання до таблиці продажу (sale)
             cursor.execute("""
-                INSERT INTO sale (id_goods, number_sale, id_check)
-                VALUES (%s, %s, %s)
+                INSERT INTO sale (id_goods, number_sale, id_check, status_check)
+                VALUES (%s, %s, %s, %s)
                 RETURNING id_sale
-            """, (id_goods, 1, 1))  # Поки що id_check = 1 як приклад
+
+            """, (id_goods, 1, 1, 1))
 
             id_sale = cursor.fetchone()[0]
 
@@ -368,11 +466,15 @@ def on_search_entry_focus_out(event):
 search_entry.bind("<FocusIn>", on_search_entry_focus_in)
 search_entry.bind("<FocusOut>", on_search_entry_focus_out)
 search_entry.bind("<KeyRelease>", on_search_entry_change)  # Залишаємо вашу функцію пошуку
+id_entry.bind("<KeyRelease>", search_by_id)
+
 
 update_time()
 add_buttons_to_frame(right_bottom_frame)
 update_table()
+update_table_down()
 program.mainloop()
+
 
 if connection:
     connection.close()
