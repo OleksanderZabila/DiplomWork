@@ -142,26 +142,63 @@ def search_by_id(event=None):
 def open_clients_window():
     win = Toplevel(program)
     win.title("Клієнти")
+    win.geometry("900x400")
 
     tree = ttk.Treeview(win, columns=("ID", "Ім'я", "Телефон", "Пошта"), show="headings")
-    tree.pack(fill=tk.BOTH, expand=True)
+    tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
     for col in tree["columns"]:
         tree.heading(col, text=col)
 
-    if connection:
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT id_client, name_client, telephone_client, mail_client FROM client")
-            for row in cursor.fetchall():
-                tree.insert("", tk.END, values=row)
+    def refresh_clients():
+        tree.delete(*tree.get_children())
+        if connection:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT id_client, name_client, telephone_client, mail_client FROM client")
+                for row in cursor.fetchall():
+                    tree.insert("", tk.END, values=row)
 
     def add_client():
-        # вікно додавання
-        pass  # вставлю логіку, якщо підтвердиш
+        add_win = Toplevel(win)
+        add_win.title("Новий клієнт")
+        add_win.geometry("300x250")
 
-    btn = Button(win, text="Додати клієнта", command=add_client)
-    btn.pack()
+        tk.Label(add_win, text="Ім'я:").pack()
+        name_entry = Entry(add_win)
+        name_entry.pack()
 
+        tk.Label(add_win, text="Телефон:").pack()
+        phone_entry = Entry(add_win)
+        phone_entry.pack()
+
+        tk.Label(add_win, text="Пошта:").pack()
+        mail_entry = Entry(add_win)
+        mail_entry.pack()
+
+        def save_client():
+            name = name_entry.get().strip()
+            phone = phone_entry.get().strip()
+            mail = mail_entry.get().strip()
+
+            if name:
+                try:
+                    with connection.cursor() as cursor:
+                        cursor.execute("""
+                            INSERT INTO client (name_client, telephone_client, mail_client)
+                            VALUES (%s, %s, %s)
+                        """, (name, phone, mail))
+                    messagebox.showinfo("Успіх", "Клієнта додано!")
+                    add_win.destroy()
+                    refresh_clients()
+                except Exception as e:
+                    messagebox.showerror("Помилка", f"Не вдалося додати клієнта: {e}")
+            else:
+                messagebox.showwarning("Увага", "Ім'я клієнта обов’язкове!")
+
+        tk.Button(add_win, text="Зберегти", command=save_client).pack(pady=10)
+
+    tk.Button(win, text="Додати клієнта", command=add_client).pack(pady=5)
+    refresh_clients()
 
 # кнопка праворуч
 clients_button = Button(upper_frame, text="Клієнти", command=open_clients_window)
@@ -241,40 +278,79 @@ def add_buttons_to_frame(frame):
 
 left_bottom_frame = tk.Frame(program, width=210, height=302, bg="white", highlightbackground="gray", highlightthickness=1)
 left_bottom_frame.place(relx=0.825, rely=0.985, anchor="se")  # Розташування зліва внизу
-left_bottom_frame.grid_propagate(False)  # Запобігає зміні розміру фрейма
+left_bottom_frame.pack_propagate(False)
+
+
 
 # Додавання кнопки в нижній частині фрейма з відступами
-def calculate_change(*args):
+def calculate_change(event=None):
     try:
-        total = float(total_label_var.get())
-        paid = float(payment_frame.get())
-        change = paid - total
+        received = float(payment_entry.get())
+        to_pay = float(total_label_var.get())
+        change = received - to_pay
         change_label_var.set(f"{change:.2f}")
     except:
         change_label_var.set("0.00")
 
-# Змінні
+
+def update_total_to_pay():
+    total = 0.0
+    for item in table_down.get_children():
+        values = table_down.item(item, "values")
+        try:
+            price = float(values[2])   # Ціна
+            quantity = int(values[3])  # Кількість
+            total += price * quantity
+        except (ValueError, IndexError):
+            continue
+    total_label_var.set(f"{total:.2f}")
+    calculate_change()
+
+
+
+# 🔧 Фрейм оплати, розтягнутий на все місце
+payment_frame = tk.Frame(left_bottom_frame, bg="#f0f0f0")
+payment_frame.pack(fill="both", expand=True, padx=5, pady=5)
+
+# 🔢 До сплати
+tk.Label(payment_frame, text="До сплати:", font=("Arial", 12)).pack(anchor="w", padx=5, pady=(5, 0))
 total_label_var = tk.StringVar(value="0.00")
+tk.Label(payment_frame, textvariable=total_label_var, font=("Arial", 16, "bold"), fg="black").pack(anchor="w", padx=5)
+
+# 💵 Отримано
+tk.Label(payment_frame, text="Отримано:", font=("Arial", 12)).pack(anchor="w", padx=5, pady=(10, 0))
+payment_entry = tk.Entry(payment_frame, font=("Arial", 12), width=10)
+payment_entry.pack(fill="x", padx=5, pady=2)
+payment_entry.bind("<KeyRelease>", calculate_change)
+
+# 💰 Решта
+tk.Label(payment_frame, text="Решта:", font=("Arial", 12)).pack(anchor="w", padx=5, pady=(10, 0))
 change_label_var = tk.StringVar(value="0.00")
-
-tk.Label(left_bottom_frame, text="До сплати:").pack()
-tk.Label(left_bottom_frame, textvariable=total_label_var, font=("Arial", 14)).pack()
-
-payment_frame = tk.Frame(left_bottom_frame, bg="lightgray", width=210, height=118)
-payment_frame.pack()
-payment_frame.pack_propagate(False)  # ❗️ВАЖЛИВО: не дозволяє зменшувати фрейм до розміру внутрішніх елементів
-
-
-
-tk.Label(left_bottom_frame, text="Решта:").pack()
-tk.Label(left_bottom_frame, textvariable=change_label_var, font=("Arial", 12)).pack()
+tk.Label(payment_frame, textvariable=change_label_var, font=("Arial", 16), fg="green").pack(anchor="w", padx=5)
 
 tk.Label(left_bottom_frame, text="Клієнт:").pack()
 client_combobox = Combobox(left_bottom_frame, values=get_clients())  # get_clients повертає лише імена
 client_combobox.pack()
 
 
-tk.Button(left_bottom_frame, text="Оплатити", command=lambda: print("Чек оплачено")).pack(pady=10)
+def process_payment():
+    if connection:
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("UPDATE sale SET status_check = 0 WHERE status_check = 1")
+            messagebox.showinfo("Оплата", "Чек оплачено успішно!")
+            update_table_down()
+        except Exception as e:
+            messagebox.showerror("Помилка", f"Не вдалося оплатити: {e}")
+
+    # Очистити поле "Отримано"
+    payment_entry.delete(0, tk.END)
+
+    # ОНОВИТИ решту
+    calculate_change()
+
+
+tk.Button(left_bottom_frame, text="Оплатити", font=("Arial", 12), command=process_payment).pack(pady=10)
 
 # Словник зі своїми ширинами для колонок
 column_widths = {
@@ -295,6 +371,8 @@ table = ttk.Treeview(right_frame, columns=columns, show="headings", height=15)
 for col in columns:
     table.heading(col, text=col)
     table.column(col, anchor="center", width=column_widths.get(col, 100))  # Використовуємо значення зі словника
+
+
 def update_table_down():
     table_down.delete(*table_down.get_children())
 
@@ -309,6 +387,8 @@ def update_table_down():
             for row in cursor.fetchall():
                 table_down.insert("", tk.END, values=(row[0], row[1], row[2], row[3], "➕ ➖ 🗑"))
 
+    # 🟢 ОНОВЛЮЄМО СУМУ ТІЛЬКИ ПІСЛЯ ЗАПОВНЕННЯ
+    update_total_to_pay()
 
 def handle_action_click(event):
     item_id = table.identify_row(event.y)
@@ -354,6 +434,7 @@ def handle_action_click(event):
 
     except Exception as e:
         messagebox.showerror("Помилка", f"Не вдалося додати товар у продаж: {e}")
+    update_table_down()
 
 def handle_down_action_click(event):
     item_id = table_down.identify_row(event.y)
@@ -412,7 +493,7 @@ def handle_down_action_click(event):
 
     except Exception as e:
         messagebox.showerror("Помилка", f"Не вдалося виконати дію: {e}")
-
+    update_table_down()
 
 table.pack(fill="both", expand=True)
 table.bind("<Button-1>", handle_action_click)  # ← ось цей
@@ -473,7 +554,9 @@ update_time()
 add_buttons_to_frame(right_bottom_frame)
 update_table()
 update_table_down()
+update_total_to_pay()
 program.mainloop()
+
 
 
 if connection:
