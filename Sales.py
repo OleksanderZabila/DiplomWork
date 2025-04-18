@@ -175,60 +175,118 @@ def open_clients_window():
     win.title("Клієнти")
     win.geometry("900x400")
 
-    tree = ttk.Treeview(win, columns=("ID", "Ім'я", "Телефон", "Пошта"), show="headings")
+    tree = ttk.Treeview(win, columns=("ID", "Ім'я", "Телефон", "Пошта", "Юр.адреса", "Правова форма", "IBAN"),
+                        show="headings")
     tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+    # Встановлення ширини стовпців
+    column_widths = {
+        "ID": 10,
+        "Ім'я": 130,
+        "Телефон": 120,
+        "Пошта": 150,
+        "Юр.адреса": 200,
+        "Правова форма": 120,
+        "IBAN": 150
+    }
 
     for col in tree["columns"]:
         tree.heading(col, text=col)
+        tree.column(col, width=column_widths.get(col, 100))
 
     def refresh_clients():
         tree.delete(*tree.get_children())
         if connection:
             with connection.cursor() as cursor:
-                cursor.execute("SELECT id_client, name_client, telephone_client, mail_client FROM client")
+                cursor.execute(
+                    "SELECT id_client, name_client, telephone_client, mail_client, legaladdress_client, legalforms_client, iban_client FROM client")
                 for row in cursor.fetchall():
                     tree.insert("", tk.END, values=row)
 
     def add_client():
         add_win = Toplevel(win)
-        add_win.title("Новий клієнт")
-        add_win.geometry("300x250")
+        add_win.title("Додати нового клієнта")
+        add_win.geometry("400x250")
 
-        tk.Label(add_win, text="Ім'я:").pack()
-        name_entry = Entry(add_win)
-        name_entry.pack()
+        # Фрейм для полів вводу
+        input_frame = Frame(add_win)
+        input_frame.pack(pady=10, padx=10, fill=tk.BOTH, expand=True)
 
-        tk.Label(add_win, text="Телефон:").pack()
-        phone_entry = Entry(add_win)
-        phone_entry.pack()
+        # Поля вводу
+        fields = [
+            ("Ім'я:", "name"),
+            ("Телефон:", "phone"),
+            ("Пошта:", "mail"),
+            ("Юридична адреса:", "legaladdress"),
+            ("Правова форма:", "legalforms"),
+            ("IBAN:", "iban")
+        ]
 
-        tk.Label(add_win, text="Пошта:").pack()
-        mail_entry = Entry(add_win)
-        mail_entry.pack()
+        entries = {}
+        for text, field in fields:
+            frame = Frame(input_frame)
+            frame.pack(fill=tk.X, pady=5)
+
+            label = Label(frame, text=text, width=15, anchor='w')
+            label.pack(side=tk.LEFT)
+
+            entry = Entry(frame)
+            entry.pack(side=tk.RIGHT, expand=True, fill=tk.X)
+            entries[field] = entry
+
+        # Фрейм для кнопок
+        button_frame = Frame(add_win)
+        button_frame.pack(pady=10)
 
         def save_client():
-            name = name_entry.get().strip()
-            phone = phone_entry.get().strip()
-            mail = mail_entry.get().strip()
+            # Отримуємо дані з полів вводу
+            data = {
+                'name': entries['name'].get().strip(),
+                'phone': entries['phone'].get().strip(),
+                'mail': entries['mail'].get().strip(),
+                'legaladdress': entries['legaladdress'].get().strip(),
+                'legalforms': entries['legalforms'].get().strip(),
+                'iban': entries['iban'].get().strip()
+            }
 
-            if name:
-                try:
-                    with connection.cursor() as cursor:
-                        cursor.execute("""
-                            INSERT INTO client (name_client, telephone_client, mail_client)
-                            VALUES (%s, %s, %s)
-                        """, (name, phone, mail))
-                    messagebox.showinfo("Успіх", "Клієнта додано!")
+            # Валідація даних
+            if not data['name']:
+                messagebox.showwarning("Увага", "Ім'я клієнта обов'язкове!")
+                return
+
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("""
+                        INSERT INTO client 
+                        (name_client, telephone_client, mail_client, legaladdress_client, legalforms_client, iban_client)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                    """, (data['name'], data['phone'], data['mail'],
+                          data['legaladdress'], data['legalforms'], data['iban']))
+
+                    # Зберігаємо зміни в базі даних
+                    connection.commit()
+
+                    messagebox.showinfo("Успіх", "Клієнта успішно додано!")
                     add_win.destroy()
                     refresh_clients()
-                except Exception as e:
-                    messagebox.showerror("Помилка", f"Не вдалося додати клієнта: {e}")
-            else:
-                messagebox.showwarning("Увага", "Ім'я клієнта обов’язкове!")
+            except Exception as e:
+                messagebox.showerror("Помилка", f"Не вдалося додати клієнта: {str(e)}")
 
-        tk.Button(add_win, text="Зберегти", command=save_client).pack(pady=10)
+        # Кнопка "Додати клієнта"
+        add_button = Button(button_frame, text="Додати клієнта", command=save_client,
+                            bg='#4CAF50', fg='white', width=15)
+        add_button.pack(side=tk.LEFT, padx=5)
 
-    tk.Button(win, text="Додати клієнта", command=add_client).pack(pady=5)
+        # Кнопка "Скасувати"
+        cancel_button = Button(button_frame, text="Скасувати", command=add_win.destroy,
+                               bg='#f44336', fg='white', width=15)
+        cancel_button.pack(side=tk.RIGHT, padx=5)
+
+    # Кнопка "Додати клієнта" у головному вікні
+    add_button_main = Button(win, text="Додати клієнта", command=add_client,
+                             bg='#4CAF50', fg='white', width=15)
+    add_button_main.pack(pady=10)
+
     refresh_clients()
 
 # кнопка праворуч
