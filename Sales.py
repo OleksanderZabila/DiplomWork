@@ -19,6 +19,31 @@ try:
 except Exception as _ex:
     print("[ERROR] Помилка підключення:", _ex)
     connection = None
+
+current_check_id = 1
+
+def get_next_check_id():
+    if connection:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT COALESCE(MAX(id_check), 0) FROM sale")
+            max_id = cursor.fetchone()[0]
+            return max_id + 1
+    return 1
+
+# І встановлюємо глобальний лічильник
+current_check_id = get_next_check_id()
+
+def get_client_id_by_name(name):
+    if not name or name == "Гість":
+        return None
+    if connection:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT id_client FROM client WHERE name_client = %s", (name,))
+            result = cursor.fetchone()
+            if result:
+                return result[0]
+    return None
+
 def get_clients():
     clients = []
     if connection:
@@ -137,6 +162,12 @@ def search_by_id(event=None):
             cursor.execute("SELECT * FROM goods WHERE CAST(id_goods AS TEXT) LIKE %s", ('%' + search_id + '%',))
             for row in cursor.fetchall():
                 table.insert("", tk.END, values=row + ("➕",))
+
+def insert_digit_to_payment(value):
+    current = payment_entry.get()
+    payment_entry.delete(0, tk.END)
+    payment_entry.insert(0, current + value)
+    calculate_change()
 
 
 def open_clients_window():
@@ -274,7 +305,16 @@ def add_buttons_to_frame(frame):
     # Створення кнопок
     for text, row, col, rowspan, colspan in buttons:
         btn = tk.Button(buttons_frame, text=text, width=8, height=2)
+
+        if text == "Delete":
+            btn.config(command=lambda e=btn: payment_entry.delete(0, tk.END))
+        elif text == "Enter":
+            btn.config(command=calculate_change)
+        else:
+            btn.config(command=lambda val=text: insert_digit_to_payment(val))
+
         btn.grid(row=row, column=col, rowspan=rowspan, columnspan=colspan, padx=2, pady=2, sticky="news")
+
 
 left_bottom_frame = tk.Frame(program, width=210, height=302, bg="white", highlightbackground="gray", highlightthickness=1)
 left_bottom_frame.place(relx=0.825, rely=0.985, anchor="se")  # Розташування зліва внизу
@@ -332,22 +372,47 @@ tk.Label(left_bottom_frame, text="Клієнт:").pack()
 client_combobox = Combobox(left_bottom_frame, values=get_clients())  # get_clients повертає лише імена
 client_combobox.pack()
 
-
 def process_payment():
+    try:
+        received = float(payment_entry.get())
+        to_pay = float(total_label_var.get())
+
+        if received < to_pay:
+            messagebox.showwarning("Недостатньо коштів", "Сума отримана менша за суму до сплати!")
+            return
+
+    except ValueError:
+        messagebox.showwarning("Помилка", "Некоректна сума в полі 'Отримано'")
+        return
+
+    client_name = client_combobox.get()
+    client_id = get_client_id_by_name(client_name)
+
     if connection:
         try:
             with connection.cursor() as cursor:
-                cursor.execute("UPDATE sale SET status_check = 0 WHERE status_check = 1")
+                # 1. Створити запис у таблиці chek
+                cursor.execute("""
+                    INSERT INTO chek (data_sell, client, sum)
+                    VALUES (CURRENT_TIMESTAMP, %s, %s)
+                    RETURNING id_check
+                """, (client_id, to_pay))
+
+                new_check_id = cursor.fetchone()[0]
+
+                # 2. Оновити записи у sale з status_check = 1
+                cursor.execute("""
+                    UPDATE sale SET status_check = 0, id_check = %s
+                    WHERE status_check = 1
+                """, (new_check_id,))
+
             messagebox.showinfo("Оплата", "Чек оплачено успішно!")
             update_table_down()
+            payment_entry.delete(0, tk.END)
+            calculate_change()
+
         except Exception as e:
-            messagebox.showerror("Помилка", f"Не вдалося оплатити: {e}")
-
-    # Очистити поле "Отримано"
-    payment_entry.delete(0, tk.END)
-
-    # ОНОВИТИ решту
-    calculate_change()
+            messagebox.showerror("Помилка", f"Не вдалося провести оплату: {e}")
 
 
 tk.Button(left_bottom_frame, text="Оплатити", font=("Arial", 12), command=process_payment).pack(pady=10)
@@ -421,8 +486,7 @@ def handle_action_click(event):
                 INSERT INTO sale (id_goods, number_sale, id_check, status_check)
                 VALUES (%s, %s, %s, %s)
                 RETURNING id_sale
-
-            """, (id_goods, 1, 1, 1))
+            """, (id_goods, 1, current_check_id, 1))
 
             id_sale = cursor.fetchone()[0]
 
