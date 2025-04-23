@@ -536,6 +536,15 @@ def handle_action_click(event):
 
     try:
         with connection.cursor() as cursor:
+            # 🔎 Перевіряємо, чи товар вже в чеку зі статусом 1
+            cursor.execute("""
+                SELECT 1 FROM sale WHERE id_goods = %s AND status_check = 1
+            """, (id_goods,))
+            if cursor.fetchone():
+                messagebox.showwarning("Товар уже додано", "Цей товар вже знаходиться у списку продажу!")
+                return  # ❌ Не додаємо знову
+
+        with connection.cursor() as cursor:
             # Зменшення кількості товару
             cursor.execute("UPDATE goods SET number_goods = number_goods - 1 WHERE id_goods = %s", (id_goods,))
 
@@ -678,8 +687,6 @@ update_table()
 update_table_down()
 update_total_to_pay()
 program.mainloop()
-
-
 
 if connection:
     connection.close()
