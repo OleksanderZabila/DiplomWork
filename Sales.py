@@ -44,6 +44,10 @@ def get_client_id_by_name(name):
                 return result[0]
     return None
 
+def refresh_client_combobox():
+    client_combobox['values'] = get_clients()
+
+
 def get_clients():
     clients = []
     if connection:
@@ -269,6 +273,7 @@ def open_clients_window():
                     messagebox.showinfo("Успіх", "Клієнта успішно додано!")
                     add_win.destroy()
                     refresh_clients()
+                    refresh_client_combobox()
             except Exception as e:
                 messagebox.showerror("Помилка", f"Не вдалося додати клієнта: {str(e)}")
 

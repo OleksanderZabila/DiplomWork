@@ -466,7 +466,31 @@ def add_settings():
 
 #звіт
 def report():
-    {}
+    if not connection:
+        messagebox.showerror("Помилка", "Немає з'єднання з базою даних.")
+        return
+
+    window = Toplevel()
+    window.title("Звіт про продажі")
+    window.geometry("600x400")
+
+    frame = tk.Frame(window)
+    frame.pack(fill="both", expand=True)
+
+    columns = ("ID чека", "Дата", "Сума", "Клієнт")
+    tree = ttk.Treeview(frame, columns=columns, show="headings")
+
+    for col in columns:
+        tree.heading(col, text=col)
+        tree.column(col, anchor="center")
+
+    tree.pack(fill="both", expand=True)
+
+    if connection:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT id_check, data_sell, sum, client FROM chek ORDER BY data_sell DESC")
+            for row in cursor.fetchall():
+                tree.insert("", "end", values=row)
 #списаний товар
 def written_off():
     """Відкриває вікно зі списаними товарами"""
