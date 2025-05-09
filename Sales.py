@@ -4,6 +4,15 @@ from tkinter import ttk, Entry, Toplevel, Label, Entry, Frame, Button, Listbox, 
 from tkinter.ttk import Combobox
 from config import host, user, password, db_name, port
 from datetime import datetime
+import sys
+current_user_id = None
+current_user_name = None
+
+if len(sys.argv) >= 3:
+    current_user_id = int(sys.argv[1])
+    current_user_name = sys.argv[2]
+else:
+    current_user_name = "Гість"
 
 # Підключення до бази даних
 try:
@@ -145,6 +154,9 @@ upper_frame.pack(fill='x', padx=10, pady=5)
 time_label = tk.Label(upper_frame, text="", font=("Arial", 14), bg="lightgray")
 time_label.pack(side='left', padx=0)
 
+tk.Label(upper_frame, text=f"Користувач: {current_user_name}", font=("Arial", 12),bg="lightgray").pack(side='left', padx=10)
+
+
 search_label = tk.Label(upper_frame, text="Фільтр за назвою:")
 search_label.pack(side='left', padx=10)
 
@@ -152,7 +164,7 @@ search_entry = Entry(upper_frame, width=40)
 search_entry.insert(0, "Введіть назву товару")
 search_entry.pack(side='left', padx=5)
 
-id_label = Label(upper_frame, text="Фільтр за ID:")
+id_label = Label(upper_frame, text="Фільтр за ID Товару:")
 id_label.pack(side=tk.LEFT)
 
 id_entry = Entry(upper_frame)
@@ -456,10 +468,10 @@ def process_payment():
             with connection.cursor() as cursor:
                 # 1. Створити запис у таблиці chek
                 cursor.execute("""
-                    INSERT INTO chek (data_sell, client, sum)
-                    VALUES (CURRENT_TIMESTAMP, %s, %s)
+                    INSERT INTO chek (data_sell, client, sum, id_user)
+                    VALUES (CURRENT_TIMESTAMP, %s, %s, %s)
                     RETURNING id_check
-                """, (client_id, to_pay))
+                """, (client_id, to_pay, current_user_id))
 
                 new_check_id = cursor.fetchone()[0]
 

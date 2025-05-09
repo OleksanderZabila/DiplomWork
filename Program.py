@@ -1,8 +1,28 @@
 import psycopg2
 import tkinter as tk
 from tkinter import ttk, Entry, Button, Listbox, messagebox, Toplevel, Label, Text
+
+from matplotlib.backend_tools import cursors
+
 from config import host, user, password, db_name, port
 from datetime import datetime
+
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox
+import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from fpdf import FPDF
+import sys
+current_user_id = None
+current_user_name = None
+
+if len(sys.argv) >= 3:
+    current_user_id = int(sys.argv[1])
+    current_user_name = sys.argv[2]
+else:
+    current_user_name = "Гість"
+
 
 open_window = None
 #test
@@ -257,6 +277,47 @@ def add_settings():
             cursor.execute("SELECT unit FROM unit")
             return cursor.fetchall()
 
+    def fetch_user():
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT id_user, name_user, status_user, password_user FROM users")
+            return cursor.fetchall()
+
+    def add_user_entry(update_func):
+        window = Toplevel()
+        window.title("Додати користувача")
+        window.geometry("350x250")
+
+        tk.Label(window, text="Ім'я користувача:").pack(pady=5)
+        name_entry = Entry(window)
+        name_entry.pack(pady=5)
+
+        tk.Label(window, text="Пароль:").pack(pady=5)
+        password_entry = Entry(window, show="*")
+        password_entry.pack(pady=5)
+
+        tk.Label(window, text="Роль:").pack(pady=5)
+        role_combobox = ttk.Combobox(window, values=["Касир", "Адміністратор"], state="readonly")
+        role_combobox.current(0)
+        role_combobox.pack(pady=5)
+
+        def save_user():
+            name = name_entry.get().strip()
+            password = password_entry.get().strip()
+            status = 1 if role_combobox.get() == "Адміністратор" else 0
+
+            if not name or not password:
+                messagebox.showerror("Помилка", "Усі поля повинні бути заповнені!")
+                return
+
+            with connection.cursor() as cursor:
+                cursor.execute('INSERT INTO "users" (name_user, password_user, status_user) VALUES (%s, %s, %s)',
+                               (name, password, status))
+                connection.commit()
+            messagebox.showinfo("Успіх", "Користувача додано!")
+            update_func()
+            window.destroy()
+
+        Button(window, text="Зберегти", command=save_user).pack(pady=10)
 
     # Функція створення таблиці
     def create_table(tab, columns, column_widths, fetch_function, add_function, tab_name):
@@ -418,6 +479,17 @@ def add_settings():
             window.destroy()
 
         Button(window, text="Зберегти", command=save).pack(pady=10)
+    tab5 = ttk.Frame(notebook)  # Користувачі
+    notebook.add(tab5, text="Користувачі")
+
+    def fetch_user():
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT id_user, name_user, status_user, password_user FROM users')
+            return cursor.fetchall()
+
+    def fetch_user_data():
+        rows = fetch_user()
+        return [(row[0], row[1], "Адміністратор" if row[2] == 1 else "Касир", row[3]) for row in rows]
 
     # Створюємо таблиці у вкладках
     create_table(
@@ -462,35 +534,167 @@ def add_settings():
                                  "INSERT INTO unit (unit) VALUES (%s)", update),
         "Одиниці"
     )
+    create_table(
+        tab5,
+        ("ID", "Ім'я", "Роль", "Пароль"),
+        [50, 150, 120, 150],
+        fetch_user_data,
+        add_user_entry,
+        "Користувачі"
+    )
 
 
 #звіт
+
+
 def report():
     if not connection:
-        messagebox.showerror("Помилка", "Немає з'єднання з базою даних.")
+        messagebox.showerror("Помилка", "Немає підключення до бази даних!")
         return
 
-    window = Toplevel()
-    window.title("Звіт про продажі")
-    window.geometry("600x400")
+    try:
+        # Отримуємо дані з БД
+        with connection.cursor() as cur:
+            cur.execute("SELECT data_sell, sum FROM chek")
+            rows = cur.fetchall()
 
-    frame = tk.Frame(window)
-    frame.pack(fill="both", expand=True)
+        if not rows:
+            messagebox.showinfo("Інформація", "Немає даних для звіту.")
+            return
 
-    columns = ("ID чека", "Дата", "Сума", "Клієнт")
-    tree = ttk.Treeview(frame, columns=columns, show="headings")
+        data = pd.DataFrame(rows, columns=["data_sell", "sum"])
+        data["data_sell"] = pd.to_datetime(data["data_sell"])
 
-    for col in columns:
-        tree.heading(col, text=col)
-        tree.column(col, anchor="center")
+        # Створення вікна
+        window = tk.Toplevel()
+        window.title("Звіт про продажі")
+        window.geometry("1000x700")
 
-    tree.pack(fill="both", expand=True)
+        # Побудова графіка
+        fig, ax = plt.subplots(figsize=(6, 4))
+        canvas = FigureCanvasTkAgg(fig, master=window)
+        canvas.get_tk_widget().pack()
 
-    if connection:
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT id_check, data_sell, sum, client FROM chek ORDER BY data_sell DESC")
-            for row in cursor.fetchall():
-                tree.insert("", "end", values=row)
+        def update_chart(period):
+            ax.clear()
+            if period == "День":
+                grouped = data.groupby(data["data_sell"].dt.date).sum()
+                x = grouped.index
+                title = "Продажі за день"
+            elif period == "Тиждень":
+                grouped = data.resample("W-Mon", on="data_sell").sum()
+                x = grouped.index.strftime("%Y-%m-%d")
+                title = "Продажі за тиждень"
+            elif period == "Місяць":
+                grouped = data.resample("M", on="data_sell").sum()
+                x = grouped.index.strftime("%Y-%m")
+                title = "Продажі за місяць"
+            elif period == "Рік":
+                grouped = data.resample("Y", on="data_sell").sum()
+                x = grouped.index.strftime("%Y")
+                title = "Продажі за рік"
+            else:
+                grouped = data
+                x = grouped["data_sell"].dt.strftime("%Y-%m-%d")
+                title = "Всі продажі"
+
+            ax.bar(x, grouped["sum"])
+            ax.set_title(title)
+            ax.set_ylabel("Сума")
+            ax.tick_params(axis='x', rotation=45)
+            fig.tight_layout()
+            canvas.draw()
+
+        # Кнопки фільтрації
+        filter_frame = tk.Frame(window)
+        filter_frame.pack(pady=10)
+
+        periods = ["День", "Тиждень", "Місяць", "Рік", "Всі"]
+        for period in periods:
+            tk.Button(filter_frame, text=period,
+                      command=lambda p=period: update_chart(p)).pack(side=tk.LEFT, padx=5)
+
+        # Таблиця продажів
+        table_frame = tk.Frame(window)
+        table_frame.pack(expand=True, fill="both", padx=10, pady=10)
+
+        table = ttk.Treeview(table_frame)
+        table.pack(expand=True, fill="both")
+
+        table["columns"] = list(data.columns)
+        table["show"] = "headings"
+
+        for col in data.columns:
+            table.heading(col, text=col)
+            table.column(col, anchor="center")
+
+        for _, row in data.iterrows():
+            table.insert("", "end", values=list(row))
+
+        # Збереження у PDF
+        def save_pdf():
+            try:
+                path = filedialog.asksaveasfilename(
+                    defaultextension=".pdf",
+                    filetypes=[("PDF", "*.pdf")],
+                    title="Зберегти звіт як PDF"
+                )
+                if not path:
+                    return
+
+                pdf = FPDF()
+                pdf.add_page()
+                pdf.set_font("Arial", size=12)
+
+                # Додаємо заголовок
+                pdf.cell(200, 10, txt="Звіт про продажі", ln=True, align='C')
+
+                # Зберігаємо графік у тимчасовий файл
+                temp_plot = "temp_plot.png"
+                fig.savefig(temp_plot)
+                pdf.image(temp_plot, w=180, h=120)
+
+                # Додаємо таблицю даних
+                pdf.add_page()
+                pdf.cell(200, 10, txt="Таблиця продажів", ln=True, align='C')
+                pdf.set_font("Arial", size=10)
+
+                col_width = 40
+                row_height = 10
+
+                # Заголовки таблиці
+                for col in data.columns:
+                    pdf.cell(col_width, row_height, txt=str(col), border=1)
+                pdf.ln()
+
+                # Дані таблиці
+                for _, row in data.iterrows():
+                    for col in data.columns:
+                        pdf.cell(col_width, row_height, txt=str(row[col]), border=1)
+                    pdf.ln()
+
+                pdf.output(path)
+                messagebox.showinfo("Успіх", f"Звіт збережено у файл: {path}")
+
+            except Exception as e:
+                messagebox.showerror("Помилка", f"Не вдалося зберегти звіт: {str(e)}")
+            finally:
+                # Видаляємо тимчасовий файл з графіком
+                try:
+                    import os
+                    if os.path.exists(temp_plot):
+                        os.remove(temp_plot)
+                except:
+                    pass
+
+        tk.Button(window, text="Зберегти в PDF", command=save_pdf).pack(pady=10)
+
+        update_chart("День")
+
+    except Exception as e:
+        messagebox.showerror("Помилка", f"Не вдалося створити звіт: {str(e)}")
+
+
 #списаний товар
 def written_off():
     """Відкриває вікно зі списаними товарами"""
@@ -758,6 +962,8 @@ upper_frame.pack(fill='x', padx=10, pady=5)
 
 time_label = tk.Label(upper_frame, text="", font=("Arial", 14), bg="lightgray")
 time_label.pack(side='left', padx=0)
+
+tk.Label(upper_frame, text=f"Користувач: {current_user_name}", font=("Arial", 12), bg="lightgray").pack(side='left', padx=10)
 
 search_label = tk.Label(upper_frame, text="Фільтр за назвою:")
 search_label.pack(side='left', padx=5)

@@ -1,30 +1,62 @@
 import tkinter as tk
-from tkinter import simpledialog, messagebox
+from tkinter import messagebox
+import psycopg2
 import subprocess
+from config import host, user, password, db_name, port
 
-def open_admin():
-    password = simpledialog.askstring("Пароль адміністратора", "Введіть пароль:", show='*')
-    if password == "admin":
-        subprocess.Popen(["python", "Program.py"])
-        root.after(100, root.destroy)  # Закрити після запуску
+# Підключення до бази
+try:
+    connection = psycopg2.connect(
+        host=host,
+        port=port,
+        user=user,
+        password=password,
+        database=db_name
+    )
+except Exception as e:
+    print("[ERROR] Підключення до БД:", e)
+    connection = None
+
+def login():
+    name = entry_user.get().strip()
+    pwd = entry_pass.get().strip()
+
+    if not name or not pwd:
+        messagebox.showwarning("Увага", "Уведіть ім'я та пароль!")
+        return
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            'SELECT id_user, name_user, password_user, status_user FROM "users" WHERE name_user = %s',
+            (name,))
+        user_data = cursor.fetchone()
+
+    if not user_data or user_data[2] != pwd:
+        messagebox.showerror("Помилка", "Невірне ім'я або пароль!")
+        return
+
+    user_id, username, _, role = user_data
+
+    # Запуск відповідної програми з параметрами
+    if role == 1:
+        subprocess.Popen(["python", "Program.py", str(user_id), username])
     else:
-        messagebox.showerror("Помилка", "Невірний пароль!")
+        subprocess.Popen(["python", "Sales.py", str(user_id), username])
+    root.destroy()
 
-def open_sales():
-    subprocess.Popen(["python", "Sales.py"])
-    root.after(100, root.destroy)  # Закрити після запуску
-
-
+# Вікно входу
 root = tk.Tk()
-root.title("Вибір ролі")
-root.geometry("300x150")
+root.title("Вхід у систему")
+root.geometry("300x200")
 
-tk.Label(root, text="Виберіть роль", font=("Arial", 14)).pack(pady=20)
+tk.Label(root, text="Ім'я користувача").pack(pady=5)
+entry_user = tk.Entry(root)
+entry_user.pack(pady=5)
 
-btn_admin = tk.Button(root, text="Адміністратор", font=("Arial", 12), command=open_admin)
-btn_admin.pack(pady=5, fill="x", padx=20)
+tk.Label(root, text="Пароль").pack(pady=5)
+entry_pass = tk.Entry(root, show='*')
+entry_pass.pack(pady=5)
 
-btn_sales = tk.Button(root, text="Продавець", font=("Arial", 12), command=open_sales)
-btn_sales.pack(pady=5, fill="x", padx=20)
+tk.Button(root, text="Увійти", command=login).pack(pady=10)
 
 root.mainloop()
