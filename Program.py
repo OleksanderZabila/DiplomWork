@@ -1,21 +1,19 @@
-import psycopg2
+import psycopg2, sys
 import tkinter as tk
 from tkinter import ttk, Entry, Button, Listbox, messagebox, Toplevel, Label, Text
-
 from matplotlib.backend_tools import cursors
-
 from config import host, user, password, db_name, port
 from datetime import datetime
-
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from fpdf import FPDF
-import sys
-current_user_id = None
-current_user_name = None
+
+
+current_user_id = int(sys.argv[1]) if len(sys.argv) > 1 else None
+current_user_name = sys.argv[2] if len(sys.argv) > 2 else "Гість"
 
 if len(sys.argv) >= 3:
     current_user_id = int(sys.argv[1])
