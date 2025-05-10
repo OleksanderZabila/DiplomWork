@@ -1,6 +1,6 @@
 import psycopg2, sys
 import tkinter as tk
-from tkinter import ttk, Entry, Button, Listbox, messagebox, Toplevel, Label, Text
+from tkinter import ttk, Entry, Button, Listbox, messagebox, Toplevel, Label, Text,LEFT, RIGHT, BOTH, END, Y
 from matplotlib.backend_tools import cursors
 from config import host, user, password, db_name, port
 from datetime import datetime
@@ -551,147 +551,184 @@ def report():
         return
 
     try:
-        # Отримуємо дані з БД
+        # Отримання даних з БД
         with connection.cursor() as cur:
-            cur.execute("SELECT data_sell, sum FROM chek")
+            cur.execute("SELECT id_check, data_sell, sum, client, id_user FROM chek")
             rows = cur.fetchall()
 
         if not rows:
             messagebox.showinfo("Інформація", "Немає даних для звіту.")
             return
 
-        data = pd.DataFrame(rows, columns=["data_sell", "sum"])
+        data = pd.DataFrame(rows, columns=["id_check", "data_sell", "sum", "client", "id_user"])
         data["data_sell"] = pd.to_datetime(data["data_sell"])
 
-        # Створення вікна
         window = tk.Toplevel()
         window.title("Звіт про продажі")
-        window.geometry("1000x700")
+        window.geometry("1200x700")
 
-        # Побудова графіка
+        filter_frame = tk.Frame(window)
+        filter_frame.pack(pady=10)
+
+        def pick_period():
+            period_win = Toplevel(window)
+            period_win.title("Вибір періоду")
+
+            tk.Label(period_win, text="Початкова дата (YYYY-MM-DD):").grid(row=0, column=0)
+            start_entry = Entry(period_win)
+            start_entry.grid(row=0, column=1)
+
+            tk.Label(period_win, text="Кінцева дата (YYYY-MM-DD):").grid(row=1, column=0)
+            end_entry = Entry(period_win)
+            end_entry.grid(row=1, column=1)
+
+            def submit():
+                try:
+                    start = pd.to_datetime(start_entry.get())
+                    end = pd.to_datetime(end_entry.get())
+                    if start > end:
+                        raise ValueError
+                    period_win.destroy()
+                    update_chart("Період", (start, end))
+                except:
+                    messagebox.showerror("Помилка", "Некоректна дата")
+
+            Button(period_win, text="ОК", command=submit).grid(row=2, column=0, columnspan=2, pady=10)
+
+        Button(filter_frame, text="День", command=lambda: update_chart("День")).pack(side=LEFT, padx=5)
+        Button(filter_frame, text="Тиждень", command=lambda: update_chart("Тиждень")).pack(side=LEFT, padx=5)
+        Button(filter_frame, text="Місяць", command=lambda: update_chart("Місяць")).pack(side=LEFT, padx=5)
+        Button(filter_frame, text="Рік", command=lambda: update_chart("Рік")).pack(side=LEFT, padx=5)
+        Button(filter_frame, text="Період", command=pick_period).pack(side=LEFT, padx=5)
+
+        content_frame = tk.Frame(window)
+        content_frame.pack(fill="both", expand=True)
+
         fig, ax = plt.subplots(figsize=(6, 4))
-        canvas = FigureCanvasTkAgg(fig, master=window)
-        canvas.get_tk_widget().pack()
+        canvas = FigureCanvasTkAgg(fig, master=content_frame)
+        canvas.get_tk_widget().pack(side=LEFT, fill=BOTH, expand=True)
 
-        def update_chart(period):
-            ax.clear()
-            if period == "День":
-                grouped = data.groupby(data["data_sell"].dt.date).sum()
-                x = grouped.index
-                title = "Продажі за день"
-            elif period == "Тиждень":
-                grouped = data.resample("W-Mon", on="data_sell").sum()
-                x = grouped.index.strftime("%Y-%m-%d")
-                title = "Продажі за тиждень"
-            elif period == "Місяць":
-                grouped = data.resample("M", on="data_sell").sum()
-                x = grouped.index.strftime("%Y-%m")
-                title = "Продажі за місяць"
-            elif period == "Рік":
-                grouped = data.resample("Y", on="data_sell").sum()
-                x = grouped.index.strftime("%Y")
-                title = "Продажі за рік"
+        table = ttk.Treeview(content_frame, columns=("id_check", "data_sell", "sum"), show="headings")
+        table.heading("id_check", text="№ Чеку")
+        table.heading("data_sell", text="Дата")
+        table.heading("sum", text="Сума")
+        table.column("id_check", anchor="center", width=80)
+        table.column("data_sell", anchor="center", width=120)
+        table.column("sum", anchor="center", width=100)
+        table.pack(side=RIGHT, fill=Y)
+
+        def show_check_details(event):
+            selected = table.selection()
+            if not selected:
+                return
+            item = table.item(selected[0])
+            check_id = item["values"][0]
+
+            with connection.cursor() as cur:
+                cur.execute("""
+                    SELECT id_check, data_sell, sum, client, u.name_user
+                    FROM chek c
+                    JOIN users u ON c.id_user = u.id_user
+                    WHERE c.id_check = %s
+                """, (check_id,))
+                row = cur.fetchone()
+
+                cur.execute("""
+                    SELECT g.name_goods, s.number_sale, g.selling_price_goods
+                    FROM sale s
+                    JOIN goods g ON s.id_goods = g.id_goods
+                    WHERE s.id_check = %s
+                """, (check_id,))
+                goods = cur.fetchall()
+
+            if not row:
+                messagebox.showinfo("Інфо", "Деталі чеку не знайдено")
+                return
+
+            details = (
+                f"Чек №{row[0]}"
+                f"\nДата: {row[1].strftime('%Y-%m-%d %H:%M:%S')}"
+                f"\nСума: {row[2]:.2f} грн"
+                f"\nКлієнт: {row[3]}"
+                f"\nПродавець: {row[4]}"
+            )
+
+            if goods:
+                details += "\nКуплено товари:\n"
+                for name, qty, selling_price_goods in goods:
+                    details += f" - {name}: {qty} шт × {selling_price_goods:.2f} грн\n"
             else:
-                grouped = data
-                x = grouped["data_sell"].dt.strftime("%Y-%m-%d")
-                title = "Всі продажі"
+                details += "(Товари не знайдені)"
 
-            ax.bar(x, grouped["sum"])
-            ax.set_title(title)
+            messagebox.showinfo("Деталі чеку", details)
+
+        table.bind("<Double-1>", show_check_details)
+
+        def update_chart(period, custom_range=None):
+            ax.clear()
+            table.delete(*table.get_children())
+            df = data.copy()
+            df = df.sort_values("data_sell")
+
+            if period == "День":
+                grouped = df.groupby(df["data_sell"].dt.date)["sum"].sum()
+                labels = grouped.index.astype(str)
+                xlabel = "Дата"
+
+            elif period == "Тиждень":
+                grouped = df.resample("W-Mon", on="data_sell")["sum"].sum()
+                labels = [str(i + 1) for i in range(len(grouped))]
+                xlabel = "Тиждень"
+
+            elif period == "Місяць":
+                grouped = df.resample("D", on="data_sell")["sum"].sum()
+                grouped.index = grouped.index.day
+                grouped = grouped.groupby(grouped.index)["sum"].sum()
+                labels = grouped.index.astype(str)
+                xlabel = "День місяця"
+
+            elif period == "Рік":
+                grouped = df.resample("M", on="data_sell")["sum"].sum()
+                labels = grouped.index.strftime("%b")
+                xlabel = "Місяць"
+
+            elif period == "Період" and custom_range:
+                start, end = custom_range
+                df = df[(df["data_sell"] >= start) & (df["data_sell"] <= end)]
+                delta = (end - start).days
+
+                if delta <= 7:
+                    grouped = df.groupby(df["data_sell"].dt.date)["sum"].sum()
+                    labels = [str(i + 1) for i in range(len(grouped))]
+                    xlabel = "№ дня"
+                elif delta <= 90:
+                    grouped = df.groupby(df["data_sell"].dt.date)["sum"].sum()
+                    labels = [str(i + 1) for i in range(len(grouped))]
+                    xlabel = "№ дня"
+                else:
+                    df["week"] = df["data_sell"].dt.isocalendar().week
+                    grouped = df.groupby("week")["sum"].sum()
+                    labels = [str(i) for i in grouped.index]
+                    xlabel = "Тижні"
+
+            else:
+                return
+
+            ax.bar(labels, grouped.values)
+            ax.set_title(f"Продажі: {period}")
+            ax.set_xlabel(xlabel)
             ax.set_ylabel("Сума")
             ax.tick_params(axis='x', rotation=45)
             fig.tight_layout()
             canvas.draw()
 
-        # Кнопки фільтрації
-        filter_frame = tk.Frame(window)
-        filter_frame.pack(pady=10)
-
-        periods = ["День", "Тиждень", "Місяць", "Рік", "Всі"]
-        for period in periods:
-            tk.Button(filter_frame, text=period,
-                      command=lambda p=period: update_chart(p)).pack(side=tk.LEFT, padx=5)
-
-        # Таблиця продажів
-        table_frame = tk.Frame(window)
-        table_frame.pack(expand=True, fill="both", padx=10, pady=10)
-
-        table = ttk.Treeview(table_frame)
-        table.pack(expand=True, fill="both")
-
-        table["columns"] = list(data.columns)
-        table["show"] = "headings"
-
-        for col in data.columns:
-            table.heading(col, text=col)
-            table.column(col, anchor="center")
-
-        for _, row in data.iterrows():
-            table.insert("", "end", values=list(row))
-
-        # Збереження у PDF
-        def save_pdf():
-            try:
-                path = filedialog.asksaveasfilename(
-                    defaultextension=".pdf",
-                    filetypes=[("PDF", "*.pdf")],
-                    title="Зберегти звіт як PDF"
-                )
-                if not path:
-                    return
-
-                pdf = FPDF()
-                pdf.add_page()
-                pdf.set_font("Arial", size=12)
-
-                # Додаємо заголовок
-                pdf.cell(200, 10, txt="Звіт про продажі", ln=True, align='C')
-
-                # Зберігаємо графік у тимчасовий файл
-                temp_plot = "temp_plot.png"
-                fig.savefig(temp_plot)
-                pdf.image(temp_plot, w=180, h=120)
-
-                # Додаємо таблицю даних
-                pdf.add_page()
-                pdf.cell(200, 10, txt="Таблиця продажів", ln=True, align='C')
-                pdf.set_font("Arial", size=10)
-
-                col_width = 40
-                row_height = 10
-
-                # Заголовки таблиці
-                for col in data.columns:
-                    pdf.cell(col_width, row_height, txt=str(col), border=1)
-                pdf.ln()
-
-                # Дані таблиці
-                for _, row in data.iterrows():
-                    for col in data.columns:
-                        pdf.cell(col_width, row_height, txt=str(row[col]), border=1)
-                    pdf.ln()
-
-                pdf.output(path)
-                messagebox.showinfo("Успіх", f"Звіт збережено у файл: {path}")
-
-            except Exception as e:
-                messagebox.showerror("Помилка", f"Не вдалося зберегти звіт: {str(e)}")
-            finally:
-                # Видаляємо тимчасовий файл з графіком
-                try:
-                    import os
-                    if os.path.exists(temp_plot):
-                        os.remove(temp_plot)
-                except:
-                    pass
-
-        tk.Button(window, text="Зберегти в PDF", command=save_pdf).pack(pady=10)
+            for _, row in df.iterrows():
+                table.insert("", END, values=(row["id_check"], row["data_sell"].date(), f"{row['sum']:.2f}"))
 
         update_chart("День")
 
     except Exception as e:
         messagebox.showerror("Помилка", f"Не вдалося створити звіт: {str(e)}")
-
 
 #списаний товар
 def written_off():
