@@ -966,6 +966,85 @@ def edit_product(product_id):
     cancel_button = Button(button_frame, text="Скасувати", command=edit_window.destroy, width=12)
     cancel_button.pack(side="left", padx=5)
 
+def open_procurement_window():
+    def submit():
+        try:
+            min_qty = int(min_qty_entry.get())
+            start = pd.to_datetime(start_entry.get())
+            end = pd.to_datetime(end_entry.get())
+        except:
+            messagebox.showerror("Помилка", "Введіть коректні значення!")
+            return
+
+        category = category_combobox.get()
+        name = name_entry.get()
+
+        query = """
+            SELECT g.name_goods, c.name_category, g.number_goods, 
+                   COALESCE(SUM(s.number_sale), 0) as sold_qty
+            FROM goods g
+            LEFT JOIN sale s ON g.id_goods = s.id_goods
+            LEFT JOIN chek ch ON s.id_check = ch.id_check AND ch.data_sell BETWEEN %s AND %s
+            JOIN category c ON g.id_category_goods = c.id_category
+            WHERE g.number_goods < %s
+        """
+
+        params = [start, end, min_qty]
+
+        if category:
+            query += " AND c.name_category = %s"
+            params.append(category)
+
+        if name:
+            query += " AND g.name_goods ILIKE %s"
+            params.append(f"%{name}%")
+
+        query += " GROUP BY g.name_goods, c.name_category, g.number_goods"
+
+        with connection.cursor() as cursor:
+            cursor.execute(query, params)
+            results = cursor.fetchall()
+
+        for row in table.get_children():
+            table.delete(row)
+        for row in results:
+            table.insert("", "end", values=row)
+
+    win = Toplevel()
+    win.title("Товари для закупівлі")
+    win.geometry("800x500")
+
+    tk.Label(win, text="Мінімальна кількість *").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+    min_qty_entry = Entry(win)
+    min_qty_entry.grid(row=0, column=1, padx=5, pady=5)
+
+    tk.Label(win, text="Період з *").grid(row=1, column=0, padx=5, pady=5, sticky="w")
+    start_entry = Entry(win)
+    start_entry.insert(0, datetime.today().strftime("%Y-%m-01"))
+    start_entry.grid(row=1, column=1, padx=5, pady=5)
+
+    tk.Label(win, text="по *").grid(row=1, column=2, padx=5, pady=5)
+    end_entry = Entry(win)
+    end_entry.insert(0, datetime.today().strftime("%Y-%m-%d"))
+    end_entry.grid(row=1, column=3, padx=5, pady=5)
+
+    tk.Label(win, text="Категорія").grid(row=2, column=0, padx=5, pady=5, sticky="w")
+    category_combobox = ttk.Combobox(win, values=fetch_categories(), width=30)
+    category_combobox.grid(row=2, column=1, columnspan=2, padx=5, pady=5)
+
+    tk.Label(win, text="Назва товару").grid(row=3, column=0, padx=5, pady=5, sticky="w")
+    name_entry = Entry(win, width=30)
+    name_entry.grid(row=3, column=1, padx=5, pady=5)
+
+    Button(win, text="Показати", command=submit).grid(row=4, column=0, columnspan=2, pady=10)
+
+    # Таблиця
+    table = ttk.Treeview(win, columns=("Назва", "Категорія", "Кількість", "Продано"), show="headings")
+    for col in table["columns"]:
+        table.heading(col, text=col)
+        table.column(col, width=150)
+    table.grid(row=5, column=0, columnspan=4, padx=10, pady=10, sticky="nsew")
+
 
 def update_time():
     """Оновлює час у віджеті Label кожну секунду."""
@@ -1018,6 +1097,8 @@ settings_button.pack(side='right', padx=5)
 
 settings_button = Button(upper_frame, text="Списане", command=written_off)
 settings_button.pack(side='right', padx=5)
+
+Button(upper_frame, text="Товари для закупівлі", command=open_procurement_window).pack(side='right', padx=5)
 
 
 # Головний контейнер
